@@ -1,0 +1,25 @@
+{
+  "type": "module",
+  "dependencies": {
+    "@huggingface/transformers": "^4.2.0",
+    "@langchain/community": "^1.1.29",
+    "@langchain/core": "^1.2.5",
+    "@langchain/textsplitters": "^1.0.1",
+    "@qdrant/js-client-rest": "^1.19.0",
+    "@tavily/core": "^0.7.7",
+    "@upstash/redis": "^1.38.2",
+    "cloudinary": "^2.11.0",
+    "cors": "^2.8.6",
+    "crypto": "^1.0.1",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "groq-sdk": "^1.5.0",
+    "mongoose": "^9.9.4",
+    "multer": "^2.2.0",
+    "nodemon": "^3.1.14",
+    "pdf-parse": "^2.4.5",
+    "razorpay": "^2.9.8",
+    "sarvamai": "^1.1.10",
+    "string-similarity-js": "^2.1.4"
+  }
+}
