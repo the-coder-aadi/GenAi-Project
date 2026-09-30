@@ -6,7 +6,11 @@ import crypto from "crypto"
 import User from "./models/User.js"
 const App = express()
 App.use(express.json())
-App.use(cors())
+App.use(
+  cors({
+    origin: "https://genai-project-1-k67z.onrender.com",
+  })
+)
 
 App.use("/", chatbot)
 
