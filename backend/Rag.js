@@ -27,13 +27,18 @@ await qdrant.createPayloadIndex("kirana-data", {
     field_schema: "keyword"
 });
 
-    const extracter = await pipeline(
-        "feature-extraction",
-        "nomic-ai/nomic-embed-text-v1.5",
-           {
+   let extracter;
 
-    }
-    )
+async function getExtracter() {
+  if (!extracter) {
+    extracter = await pipeline(
+      "feature-extraction",
+      "nomic-ai/nomic-embed-text-v1.5"
+    );
+  }
+
+  return extracter;
+}
 
     export async function isDuplicate(sessionid, fileHash) {
     const result = await qdrant.count("kirana-data", {
@@ -60,6 +65,7 @@ await qdrant.createPayloadIndex("kirana-data", {
 }
 
 export async function storedocument(filepath, sessionid, fileHash, documentId) {
+    const extracter = await getExtracter();
     //   const documentId = crypto.randomUUID();
     const loder = await new PDFLoader(filepath, {splitPages:false})
     const doc = await loder.load()
@@ -109,6 +115,7 @@ console.log(chunks.length);
 }
 
  export async function searchdocuments(query, sessionid, documentId) {
+    const extracter = await getExtracter();
     const embedding = await extracter(
         "search_query: " + query,
         {
