@@ -19,6 +19,10 @@ import {
   CircleX,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import SmallToast from "./SmallToast";
+import QuizResultPopup from "./QuizResultPopup";
+
+
 
 function Home() {
   // =========================================================
@@ -30,6 +34,84 @@ const navigate = useNavigate()
   const [quiztype, setquizetype] = useState(
     () => localStorage.getItem("quizType") || null
   );
+  const [isModeLoading, setIsModeLoading] = useState(false);
+
+  const [quizResultOpen, setQuizResultOpen] = useState(false);
+const [quizCorrect, setQuizCorrect] = useState(false);
+
+const [toastOpen, setToastOpen] = useState(false);
+const [toastMessage, setToastMessage] = useState("");
+
+  function ModeSkeleton({ mode }) {
+  if (mode === "chat") {
+    return (
+      <div className="space-y-4 animate-pulse">
+        <div className="flex justify-start">
+          <div className="w-7 h-7 rounded-full bg-gray-200 shrink-0" />
+          <div className="ml-2 w-56 h-12 rounded-2xl bg-gray-200" />
+        </div>
+
+        <div className="flex justify-end">
+          <div className="w-48 h-10 rounded-2xl bg-gray-200" />
+        </div>
+
+        <div className="flex justify-start">
+          <div className="w-7 h-7 rounded-full bg-gray-200 shrink-0" />
+          <div className="ml-2 w-72 h-16 rounded-2xl bg-gray-200" />
+        </div>
+      </div>
+    );
+  }
+
+  if (mode === "quiz") {
+    return (
+      <div className="flex justify-start animate-pulse">
+        <div className="w-7 h-7 rounded-full bg-gray-200 shrink-0" />
+
+        <div className="ml-2 w-full max-w-[650px] bg-white border border-gray-100 rounded-2xl p-5">
+          <div className="w-24 h-3 bg-gray-200 rounded mb-4" />
+
+          <div className="w-3/4 h-5 bg-gray-200 rounded mb-6" />
+
+          <div className="space-y-2.5">
+            <div className="w-full h-12 bg-gray-200 rounded-xl" />
+            <div className="w-full h-12 bg-gray-200 rounded-xl" />
+            <div className="w-full h-12 bg-gray-200 rounded-xl" />
+            <div className="w-full h-12 bg-gray-200 rounded-xl" />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (mode === "summary") {
+    return (
+      <div className="flex justify-start animate-pulse">
+        <div className="w-7 h-7 rounded-full bg-gray-200 shrink-0" />
+
+        <div className="ml-2 w-full max-w-[600px] bg-white border border-gray-100 rounded-2xl p-5">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-9 h-9 rounded-xl bg-gray-200" />
+
+            <div>
+              <div className="w-28 h-4 bg-gray-200 rounded mb-2" />
+              <div className="w-48 h-3 bg-gray-200 rounded" />
+            </div>
+          </div>
+
+          <div className="space-y-2.5">
+            <div className="w-full h-3 bg-gray-200 rounded" />
+            <div className="w-11/12 h-3 bg-gray-200 rounded" />
+            <div className="w-4/5 h-3 bg-gray-200 rounded" />
+            <div className="w-full h-3 bg-gray-200 rounded" />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return null;
+}
 
   // =========================================================
   // MODE STATES
@@ -111,7 +193,7 @@ planinfo()
 
 async function planinfo() {
   try {
-    const api = await fetch(`http://localhost:3000/user/planinfo/${sessionid}`)
+    const api = await fetch(`${import.meta.env.VITE_API_URL}/user/planinfo/${sessionid}`)
     const res = await api.json()
     console.log(res);
      if (res.success) {
@@ -130,7 +212,7 @@ async function planinfo() {
 
   async function UsersInfo() {
     try {
-      const api = await fetch("http://localhost:3000/user/session",{
+      const api = await fetch(`${import.meta.env.VITE_API_URL}/user/session`,{
         method:"POST",
         headers:{
           "Content-Type" : "application/json"
@@ -240,7 +322,7 @@ async function planinfo() {
   async function updateDocumentSelection(documentId, selected) {
     try {
       const response = await fetch(
-        `http://localhost:3000/documents/${documentId}/select`,
+        `${import.meta.env.VITE_API_URL}/documents/${documentId}/select`,
         {
           method: "PATCH",
           headers: {
@@ -367,7 +449,7 @@ async function planinfo() {
   async function loadChatHistory() {
     try {
       const response = await fetch(
-        `http://localhost:3000/session/${sessionid}?mode=chat`
+        `${import.meta.env.VITE_API_URL}/session/${sessionid}?mode=chat`
       );
 
       const data = await response.json();
@@ -398,38 +480,41 @@ async function planinfo() {
   // HANDLE MODE CHANGE
   // =========================================================
 
-  function handleModeChange(newMode) {
-    // Current mode ko immediately ref mein save karo
-    modeRef.current = newMode;
+ async function handleModeChange(newMode) {
+  modeRef.current = newMode;
 
-    setMode(newMode);
-    localStorage.setItem("mode", newMode);
-    setInput("");
-    setIsTyping(false);
+  setIsModeLoading(true);
+  setMode(newMode);
+  localStorage.setItem("mode", newMode);
 
-    if (newMode === "quiz") {
-      setquizetype(null);
+  setInput("");
+  setIsTyping(false);
 
-      setmessages([
-        {
-          sender: "bot",
-          type: "quiz-options",
-          text: "Great choice! 🧠 How would you like to start your quiz?",
-          time: formatTime(new Date()),
-        },
-      ]);
+  if (newMode === "quiz") {
+    setquizetype(null);
 
-      return;
-    }
+    setmessages([
+      {
+        sender: "bot",
+        type: "quiz-options",
+        text: "Great choice! 🧠 How would you like to start your quiz?",
+        time: formatTime(new Date()),
+      },
+    ]);
 
-    if (newMode === "summary") {
-      setmessages([]);
-      return;
-    }
-
-    // Chat mode
-    loadChatHistory();
+    setIsModeLoading(false);
+    return;
   }
+
+  if (newMode === "summary") {
+    setmessages([]);
+    return;
+  }
+
+  // Chat
+  await loadChatHistory();
+  setIsModeLoading(false);
+}
 
   // =========================================================
   // INITIAL CHAT SCREEN
@@ -464,14 +549,14 @@ useEffect(() => {
   // FILE VALIDATION
   // =========================================================
 
-  function validateAndSetFile(file) {
-    if (file && file.type === "application/pdf") {
-      setPdfFile(file);
-    } else {
-      alert("Please select a PDF file.");
-    }
+function validateAndSetFile(file) {
+  if (file && file.type === "application/pdf") {
+    setPdfFile(file);
+  } else {
+    setToastMessage("Please select a PDF file.");
+    setToastOpen(true);
   }
-
+}
   // =========================================================
   // FILE SELECT
   // =========================================================
@@ -508,7 +593,7 @@ useEffect(() => {
       formData.append("pdf", pdfFile);
       formData.append("sessionid", sessionid);
 
-      const api = await fetch("http://localhost:3000/upload-pdf", {
+      const api = await fetch(`${import.meta.env.VITE_API_URL}/upload-pdf`, {
         method: "POST",
         body: formData,
       });
@@ -525,7 +610,6 @@ useEffect(() => {
 
         setDocuments((prev) => [newDoc, ...prev]);
 
-        setSelectedDocIds((prev) => [...prev, newDoc.id]);
 
         setPdfFile(null);
       } else {
@@ -552,7 +636,7 @@ useEffect(() => {
 async function removeDocument(documentId) {
   try {
     const response = await fetch(
-      `http://localhost:3000/documents/${sessionid}/${documentId}`,
+      `${import.meta.env.VITE_API_URL}/documents/${sessionid}/${documentId}`,
       {
         method: "DELETE",
       }
@@ -583,7 +667,7 @@ async function removeDocument(documentId) {
   async function loadQuizHistory(type) {
     try {
       const response = await fetch(
-        `http://localhost:3000/session/${sessionid}?mode=quiz&quizType=${type}`
+        `${import.meta.env.VITE_API_URL}/session/${sessionid}?mode=quiz&quizType=${type}`
       );
 
       const data = await response.json();
@@ -601,8 +685,9 @@ async function removeDocument(documentId) {
 
   async function loadDocuments() {
     try {
+       console.log("FRONTEND SESSION ID:", sessionid);
       const response = await fetch(
-        `http://localhost:3000/documents/${sessionid}`
+        `${import.meta.env.VITE_API_URL}/documents/${sessionid}`
       );
 
       const data = await response.json();
@@ -643,12 +728,11 @@ async function removeDocument(documentId) {
   // =========================================================
 
   async function handleQuizStart(type) {
-    if (type === "pdf" && selectedDocIds.length === 0) {
-      alert(
-        "Please select at least one PDF before starting the quiz."
-      );
-      return;
-    }
+  if (type === "pdf" && selectedDocIds.length === 0) {
+  setToastMessage("Please select at least one PDF before starting the quiz.");
+  setToastOpen(true);
+  return;
+}
 
     setquizetype(type);
     localStorage.setItem("quizType", type);
@@ -746,13 +830,8 @@ async function removeDocument(documentId) {
       selectedOption === correctOption;
 
     // Browser alert
-    if (isCorrect) {
-      alert("🎉 Your answer is right!");
-    } else {
-      alert(
-        "Nice try! ❌ Your option is wrong."
-      );
-    }
+  setQuizCorrect(isCorrect);
+  setQuizResultOpen(true);
 
     // Update this question permanently
     setmessages((prev) =>
@@ -846,7 +925,7 @@ async function removeDocument(documentId) {
 
     while (true) {
       const api = await fetch(
-        "http://localhost:3000/summaries",
+        `${import.meta.env.VITE_API_URL}/summaries`,
         {
           method: "POST",
 
@@ -973,28 +1052,34 @@ async function removeDocument(documentId) {
       // PDF COMPLETE
       // =========================
 
-      if (result?.completed) {
-        setmessages(prev => [
-          ...prev,
-          {
-            sender: "bot",
-            type: "summary-status",
-            text: `Summarisation completed for "${summaryDocumentName}".`,
-            time: formatTime(new Date())
-          },
-          {
-            sender: "bot",
-            type: "clear-summary",
-            text: "Remove All Your Summary.",
-            documentId: selectedDocIds[0],
-            time: formatTime(new Date())
-          }
-        ]);
+    if (result?.completed) {
 
-        console.log("✅ PDF SUMMARY FINISHED");
+  // Start Summarisation button ko immediately hide karo
+ setmessages(prev =>
+  prev.filter(message => message.type !== "summary-welcome")
+);
 
-        break;
-      }
+  setmessages(prev => [
+    ...prev,
+    {
+      sender: "bot",
+      type: "summary-status",
+      text: `Summarisation completed for "${summaryDocumentName}".`,
+      time: formatTime(new Date())
+    },
+    {
+      sender: "bot",
+      type: "clear-summary",
+      text: "Remove All Your Summary.",
+      documentId: selectedDocIds[0],
+      time: formatTime(new Date())
+    }
+  ]);
+
+  console.log("✅ PDF SUMMARY FINISHED");
+
+  break;
+}
 
       // =========================
       // NEXT CHUNKS
@@ -1042,7 +1127,7 @@ async function removeDocument(documentId) {
       const pdfName = selectedDocument?.name || "Selected PDF";
 
       const response = await fetch(
-        `http://localhost:3000/summaries/${sessionid}/${documentId}`
+        `${import.meta.env.VITE_API_URL}/summaries/${sessionid}/${documentId}`
       );
 
       const data = await response.json();
@@ -1087,11 +1172,19 @@ async function removeDocument(documentId) {
     }
   }
 
-  useEffect(() => {
-    if (mode !== "summary") return;
+ useEffect(() => {
+  if (mode !== "summary") return;
 
-    loadSummaries();
-  }, [mode, selectedDocIds, documents]);
+  async function loadSummaryData() {
+    setIsModeLoading(true);
+
+    await loadSummaries();
+
+    setIsModeLoading(false);
+  }
+
+  loadSummaryData();
+}, [mode, selectedDocIds, documents]);
   // ========================================================
   // SEND MESSAGE
   // =========================================================
@@ -1130,7 +1223,7 @@ async function removeDocument(documentId) {
 
     try {
       const api = await fetch(
-        "http://localhost:3000/sendmsg",
+        `${import.meta.env.VITE_API_URL}/sendmsg`,
         {
           method: "POST",
 
@@ -1368,15 +1461,17 @@ async function removeDocument(documentId) {
       // QUIZ ERROR
       // =====================================================
 
-      else if (
-        !res.success &&
-        res.mode === "quiz"
-      ) {
-        alert(
-          res.message ||
-          "Please select at least one PDF or choose random."
-        );
-      }
+  else if (
+  !res.success &&
+  res.mode === "quiz"
+) {
+  setToastMessage(
+    res.message ||
+    "Please select at least one PDF or choose random."
+  );
+
+  setToastOpen(true);
+}
 
       // =====================================================
       // GENERAL ERROR
@@ -1419,7 +1514,7 @@ async function removeDocument(documentId) {
 
   async function clearSummary(documenId) {
     try {
-      const api = await fetch(`http://localhost:3000/clearsummary/${sessionid}/${documenId}`, {
+      const api = await fetch(`${import.meta.env.VITE_API_URL}/clearsummary/${sessionid}/${documenId}`, {
         method: "DELETE"
       })
       const res = await api.json()
@@ -1555,18 +1650,20 @@ async function removeDocument(documentId) {
         {/* Sidebar header */}
 
         <div className="px-5 pt-6 pb-5 border-b border-gray-100 flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-600 to-violet-500 flex items-center justify-center text-white shadow-md shadow-indigo-200">
-              <Sparkles size={17} />
-            </div>
+         <div className="flex items-center gap-2.5">
+  <img
+    src="/medhaai.png"
+    alt="Medhā AI"
+    className="w-10 h-10 object-contain rounded-xl"
+  />
 
             <div>
               <h1 className="font-display font-bold text-[15px] text-gray-900 leading-none">
-                Aditya Kirana
+               Medha Ai
               </h1>
 
               <p className="text-[11px] text-gray-400 mt-1">
-                Sales Assistant · RAG
+           Your AI Study Saathi
               </p>
             </div>
           </div>
@@ -1714,9 +1811,9 @@ async function removeDocument(documentId) {
                     {doc.name}
                   </p>
 
-                  <p className="text-[10.5px] text-gray-400">
-                    {formatSize(doc.size)} ·{" "}
-                    {formatTime(doc.uploadedAt)}
+                  <p className="text-[10.5px] pt-1 text-gray-400">
+                    {formatSize(doc.size)} 
+                   
                   </p>
                 </div>
 
@@ -1794,7 +1891,7 @@ async function removeDocument(documentId) {
 
     <div className="shrink-0">
       <h2 className="font-display font-semibold text-[15px] text-gray-900 truncate">
-        Sales Assistant
+         AI Study Saathi
       </h2>
 
       <p className="text-[11px] text-emerald-600 flex items-center gap-1">
@@ -1904,7 +2001,11 @@ async function removeDocument(documentId) {
         {/* ================================================= */}
 
         <div className="flex-1 min-w-0 overflow-y-auto overflow-x-hidden px-3 sm:px-6 py-5 space-y-4">
-          {messages.map((message, ind) => {
+
+  {isModeLoading ? (
+    <ModeSkeleton mode={mode} />
+  ) : (
+    messages.map((message, ind) => {
             if (!message) return null;
 
             const isUser =
@@ -2014,6 +2115,11 @@ async function removeDocument(documentId) {
                       </span>
                     </div>
                   </div>
+    <SmallToast
+  isOpen={toastOpen}
+  message={toastMessage}
+  onClose={() => setToastOpen(false)}
+/>
                 </div>
               );
             }
@@ -2339,7 +2445,11 @@ async function removeDocument(documentId) {
                       </span>
                     </div>
                   </div>
-
+                 <QuizResultPopup
+      isOpen={quizResultOpen}
+      isCorrect={quizCorrect}
+      onClose={() => setQuizResultOpen(false)}
+    />
                 </div>
 
               );
@@ -2638,7 +2748,8 @@ if (
 
               </div>
             );
-          })}
+                   })
+  )}
 
           {/* ================================================= */}
           {/* TYPING INDICATOR                                  */}

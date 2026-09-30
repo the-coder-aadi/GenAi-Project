@@ -11,7 +11,7 @@ import {
   Trophy,
   ArrowRight,
 } from "lucide-react";
-
+import PaymentResultPopup from "./PaymentResultPopup";
 import { ArrowLeft } from "lucide-react";
 import { useEffect, useState } from "react";
 
@@ -124,7 +124,7 @@ const handlepayment = async (plan) => {
   try {
     // 1. Backend se order create karo
     const response = await fetch(
-      "http://localhost:3000/api/payment/create-order",
+      `${import.meta.env.VITE_API_URL}/api/payment/create-order`,
       {
         method: "POST",
         headers: {
@@ -164,7 +164,7 @@ const handlepayment = async (plan) => {
           // ==========================================
 
           const verifyResponse = await fetch(
-            "http://localhost:3000/api/payment/verify",
+            `${import.meta.env.VITE_API_URL}/api/payment/verify`,
             {
               method: "POST",
 
@@ -195,24 +195,30 @@ const handlepayment = async (plan) => {
           // STEP 5: CHECK VERIFICATION RESULT
           // ==========================================
 
-          if (verifyData.success) {
+         if (verifyData.success) {
 
-            console.log(
-              "Payment verified:",
-              verifyData
-            );
+  console.log(
+    "Payment verified:",
+    verifyData
+  );
 
-            alert(
-              "Payment successful and verified!"
-            );
+  setPaymentSuccess(true);
+  setPaymentMessage(
+    verifyData.message || "Payment successful and verified!"
+  );
+  setPaymentPopupOpen(true);
 
-          } else {
+} else {
 
-            alert(
-              "Payment verification failed"
-            );
+  console.log("VERIFY RESPONSE:", verifyData);
 
-          }
+  setPaymentSuccess(false);
+  setPaymentMessage(
+    verifyData.message || "Payment verification failed"
+  );
+  setPaymentPopupOpen(true);
+
+}
 
         } catch (error) {
 
@@ -221,9 +227,11 @@ const handlepayment = async (plan) => {
             error
           );
 
-          alert(
-            "Something went wrong while verifying payment"
-          );
+         setPaymentSuccess(false);
+setPaymentMessage(
+  "Something went wrong while verifying payment"
+);
+setPaymentPopupOpen(true);
         }
       },
 
@@ -430,6 +438,10 @@ export default function Pricing() {
   const [currentPlan, setCurrentPlan] = useState(
   localStorage.getItem("currentPlan") || "free"
 );
+
+const [paymentPopupOpen, setPaymentPopupOpen] = useState(false);
+const [paymentSuccess, setPaymentSuccess] = useState(false);
+const [paymentMessage, setPaymentMessage] = useState("");
 
 const [planExpiresAt, setPlanExpiresAt] = useState(
   localStorage.getItem("planExpiresAt") || null
@@ -639,7 +651,7 @@ const [planExpiresAt, setPlanExpiresAt] = useState(
             summaries, and web search.
           </p>
 
-          <button className="mt-8 inline-flex items-center gap-2 rounded-xl bg-white px-6 py-3.5 text-sm font-bold text-slate-950 transition hover:bg-slate-100">
+          <button  onClick={() => handlepayment("pro")} className="mt-8 inline-flex items-center gap-2 rounded-xl bg-white px-6 py-3.5 text-sm font-bold text-slate-950 transition hover:bg-slate-100">
             Upgrade to Pro
             <ArrowRight size={16} />
           </button>
@@ -653,6 +665,13 @@ const [planExpiresAt, setPlanExpiresAt] = useState(
           Upgrade or change your plan anytime.
         </p>
       </div>
+
+      <PaymentResultPopup
+  isOpen={paymentPopupOpen}
+  isSuccess={paymentSuccess}
+  message={paymentMessage}
+  onClose={() => setPaymentPopupOpen(false)}
+/>
 
     </main>
   );

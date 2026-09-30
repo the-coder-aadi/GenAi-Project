@@ -120,7 +120,7 @@ console.log(chunks.length);
 
     const result = await qdrant.query("kirana-data",{
        query:vector,
-       limit:2,
+       limit:3,
        with_payload:true,
          score_threshold: 0.5,
 

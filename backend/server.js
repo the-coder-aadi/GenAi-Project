@@ -10,6 +10,9 @@ App.use(cors())
 
 App.use("/", chatbot)
 
+console.log("KEY:", process.env.TEST_API_KEY);
+console.log("SECRET EXISTS:", !!process.env.TEST_KEY_SECRET);
+
 const razorpay = new Razorpay({
   key_id: process.env.TEST_API_KEY,
   key_secret: process.env.TEST_KEY_SECRET,
@@ -235,8 +238,10 @@ App.get("/user/planinfo/:sessionid",async(req,res)=>{
   }
 })
 
-App.listen(3000, ()=>{
-    console.log("server running on 3000");
-})
+const PORT = process.env.PORT || 3000;
+
+App.listen(PORT, "0.0.0.0", () => {
+  console.log(`server running on ${PORT}`);
+});
 
 

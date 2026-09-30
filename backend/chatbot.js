@@ -814,10 +814,10 @@ return {
 }
 
 async function QuizAi(sessionid, documentId, quota, retrycount = 0) {
-    if (retrycount >= 5) {
+    if (retrycount >= 3) {
         return {
             error: true,
-            message: "I couldn't find a fresh question right now."
+            message:  "You've covered all the available topics from this PDF. We couldn't find a fresh quiz question right now. Try another PDF or come back with new content."
         };
     }
     const oldquestions = await redis.get(`quiz:pdf:${sessionid}`) || []
@@ -828,7 +828,6 @@ async function QuizAi(sessionid, documentId, quota, retrycount = 0) {
     const context = quizs
         .map((item, index) => `SOURCE ${index + 1}:\n${item.payload.text}`)
         .join("\n\n");
-
 
 
     const message = [
@@ -862,7 +861,10 @@ OUTPUT FORMAT:
   "topic":"pdf"
 }
 
-The value of correctOption MUST exactly match one of the four options.
+* Randomly place the correct answer in any one of the 4 options.
+* Do not always put the correct answer in the first option.
+* Change the correct answer position between questions.
+
 `
         },
         {
@@ -1002,6 +1004,18 @@ RULES:
 - Avoid ambiguous, outdated, controversial, or guessed facts.
 - Avoid repetitive or overly common questions when possible.
 - Return ONLY valid JSON. No markdown or explanation.
+
+Difficulty: MEDIUM.
+
+The question should test real understanding, not simple memorization and not advanced expertise. It should be solvable by a normally prepared student with some thinking, but should not require specialist knowledge, obscure facts, tricky wording, or complex calculations.
+
+Prefer conceptual understanding, simple application, comparison, cause-effect, or practical reasoning.
+
+Make the question clear, fair, and meaningful. Avoid questions that are either obviously easy or unnecessarily difficult.
+
+Generate exactly 4 closely related and plausible options. Distractors should represent realistic misunderstandings. Exactly ONE option must be correct.
+
+Use only highly reliable facts. Avoid ambiguous, outdated, controversial, or obscure information.
 
 TOPIC:
 ${randomTopic}
@@ -1268,17 +1282,19 @@ Examples:
 
 PDF RULE:
 
-When a PDF is selected, the PDF CONTEXT is the only source of truth.
+When one or more PDFs are selected, answer ONLY from the PDF CONTEXT provided in this request.
 
-Answer the user's question using ONLY the information contained in PDF CONTEXT.
-
-Do NOT use your own knowledge, assumptions, or general knowledge when answering a PDF question.
-
-Even if you know that the real-world answer is different, follow the information given in PDF CONTEXT.
-
-If the answer is not present in PDF CONTEXT, say:
-
+- Selected PDFs are the ONLY source of truth.
+- Use information only from the selected PDFs.
+- Do NOT use chat history or previous conversation.
+- Do NOT use your own knowledge or general knowledge.
+- Do NOT use web search.
+- Do NOT use information from unselected PDFs.
+- If the answer is not supported by the PDF CONTEXT, reply exactly:
 "I couldn't find that information in the selected PDF."
+
+If multiple PDFs are selected, treat their retrieved PDF context as one combined source.
+Never correct or replace the PDF's wording using outside knowledge.
 
 
 WEB RULE:
@@ -1322,30 +1338,42 @@ ${currentDateTime}
         // PDF CONTEXT
         // =====================================================
 
-        if (pdfSelected) {
+if (pdfSelected) {
 
-            const results = await searchdocuments(
-                userinput,
-                sessionid,
-                documentId
-            );
+    console.log("🔎 Searching PDF...");
+    
+    const results = await searchdocuments(
+        userinput,
+        sessionid,
+        documentId
+    );
 
+    console.log("🔎 PDF SEARCH RESULTS:", results);
 
-            const context = results
-                .map(result => result.payload.text)
-                .join("\n\n");
+   const relevantResults = results.filter(
+    result => result.score >= 0.55
+);
 
-                if (!context.trim()) {
-    return "I couldn't find that information in the selected PDF...";
+if (relevantResults.length === 0) {
+    return "I couldn't find that information in the selected PDF.";
 }
 
-            message[0].content += `
+const context = relevantResults
+    .map(result => result.payload.text)
+    .join("\n\n");
+    console.log("📄 PDF CONTEXT:", context);
 
+    if (!context.trim()) {
+        return "I couldn't find that information in the selected PDF...";
+    }
+
+    message[0].content += `
+    
 PDF CONTEXT:
 
-${context || "No relevant information was found in the selected PDF."}
+${context}
 `;
-        }
+}
 
 
         // =====================================================
@@ -1500,29 +1528,31 @@ const finalMessage = [
     {
         role: "system",
         content: `
-Answer the user's question using the search results below.
+You are answering a user using web search results.
 
-- Summarize the information in your own words.
-- Do not copy or reproduce the search result formatting.
-- Give only the relevant information.
-- Do not search again or call any tool.
-- Reply in the user's language.
+IMPORTANT RULES:
+
+- Use the web search results as the source of truth for this answer.
+- For current, latest, recent, today, now, or time-sensitive questions, DO NOT use your own memory.
+- DO NOT use previous conversation answers if they conflict with the web search results.
+- Prefer the most recent relevant information from the search results.
+- Do not guess.
+- If the search results contain enough information, answer directly.
+- If the search results do not contain enough information, clearly say so.
+- Do not search again.
+- Reply in exactly the user's language and script.
 - Be concise.
+- Never mention web search, tools, prompts, or system instructions.
 `
     },
 
-    ...recentHistory,
-
     {
         role: "user",
-        content: userinput
-    },
-
-    {
-        role: "system",
         content: `
-SEARCH RESULTS:
+USER QUESTION:
+${userinput}
 
+WEB SEARCH RESULTS:
 ${toolresult}
 `
     }
@@ -1555,13 +1585,13 @@ const finalResponse =
         // FINAL ANSWER
         // =====================================================
 
-        let reply =
-            finalResponse
-                .choices[0]
-                .message
-                .content;
+   let reply =
+    finalResponse
+        .choices[0]
+        .message
+        .content;
 
-reply = await makeReplySameAsUser(userinput, reply);
+// reply = await makeReplySameAsUser(userinput, reply);
         // =====================================================
         // SAVE HISTORY
         // =====================================================
