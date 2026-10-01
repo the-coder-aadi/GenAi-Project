@@ -34,8 +34,9 @@ async function getExtracter() {
     extracter = await pipeline(
       "feature-extraction",
       "nomic-ai/nomic-embed-text-v1.5",
-        {
-    device: "cpu"
+   {
+    device: "cpu",
+    dtype: "q4f16"
   }
     );
   }
