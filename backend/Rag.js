@@ -33,7 +33,10 @@ async function getExtracter() {
   if (!extracter) {
     extracter = await pipeline(
       "feature-extraction",
-      "nomic-ai/nomic-embed-text-v1.5"
+      "nomic-ai/nomic-embed-text-v1.5",
+        {
+    device: "cpu"
+  }
     );
   }
 
