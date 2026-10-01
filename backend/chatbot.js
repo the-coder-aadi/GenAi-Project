@@ -281,24 +281,19 @@ chatbot.post("/upload-pdf", upload.single("pdf"), async (req, res) => {
         );
 
 
-        // 2️⃣ MongoDB mein data save
-        await Document.create({
-            documentId: documentId,
-            sessionid: sessionid,
-            name: req.file.originalname,
-            size: req.file.size,
-            cloudinaryUrl: cloudinaryResult.secure_url,
-            fileHash: fileHash
-        });
+    res.json({
+    success: true,
+    message: "PDF uploaded successfully",
+    filename: req.file.originalname,
+    documentId: documentId
+});
 
-
-        // 3️⃣ Existing PDF processing
-        await storedocument(
-            filepath,
-            sessionid,
-            fileHash,
-            documentId
-        );
+storedocument(
+    filepath,
+    sessionid,
+    fileHash,
+    documentId
+)
 
 
         res.json({
