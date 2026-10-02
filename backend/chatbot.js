@@ -280,23 +280,34 @@ chatbot.post("/upload-pdf", upload.single("pdf"), async (req, res) => {
             }
         );
 
-
-    res.json({
-    success: true,
-    message: "PDF uploaded successfully",
-    filename: req.file.originalname,
-    documentId: documentId
+        await Document.create({
+    documentId,
+    sessionid,
+    name: req.file.originalname,
+    size: req.file.size,
+    cloudinaryUrl: cloudinaryResult.secure_url,
+    fileHash
 });
+
+
+//  res.json({
+//     success: true,
+//     message: "PDF uploaded successfully",
+//     filename: req.file.originalname,
+//     documentId: documentId
+// });
 
 storedocument(
     filepath,
     sessionid,
     fileHash,
     documentId
-)
+).catch((error) => {
+    console.error("PDF processing failed:", error);
+});
 
-
-        res.json({
+console.log("SENDING UPLOAD SUCCESS RESPONSE");
+       return res.json({
             success: true,
             message: "PDF uploaded successfully",
             filename: req.file.originalname,

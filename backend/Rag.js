@@ -2,7 +2,7 @@ import dotenv from "dotenv"
 dotenv.config()
 import { PDFLoader } from "@langchain/community/document_loaders/fs/pdf";
 import { RecursiveCharacterTextSplitter } from "@langchain/textsplitters";
-import { pipeline } from "@huggingface/transformers";
+// import { pipeline } from "@huggingface/transformers";
 import { QdrantClient } from "@qdrant/js-client-rest";
 import crypto from "crypto"
 
@@ -27,21 +27,52 @@ await qdrant.createPayloadIndex("kirana-data", {
     field_schema: "keyword"
 });
 
-   let extracter;
+//    let extracter;
 
-async function getExtracter() {
-  if (!extracter) {
-    extracter = await pipeline(
-      "feature-extraction",
-      "nomic-ai/nomic-embed-text-v1.5",
-   {
-    device: "cpu",
-    dtype: "q4f16"
-  }
+// async function getExtracter() {
+//   if (!extracter) {
+//     extracter = await pipeline(
+//       "feature-extraction",
+//       "nomic-ai/nomic-embed-text-v1.5",
+//    {
+//     device: "cpu",
+//   }
+//     );
+//   }
+
+//   return extracter;
+// }
+
+
+async function getNomicEmbeddings(texts, taskType) {
+  const response = await fetch(
+    "https://api-atlas.nomic.ai/v1/embedding/text",
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${process.env.NOMIC_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "nomic-embed-text-v1.5",
+        texts,
+        task_type: taskType,
+        dimensionality: 768,
+      }),
+    }
+  );
+
+  if (!response.ok) {
+    const errorText = await response.text();
+
+    throw new Error(
+      `Nomic API error ${response.status}: ${errorText}`
     );
   }
 
-  return extracter;
+  const data = await response.json();
+
+  return data.embeddings;
 }
 
     export async function isDuplicate(sessionid, fileHash) {
@@ -69,7 +100,7 @@ async function getExtracter() {
 }
 
 export async function storedocument(filepath, sessionid, fileHash, documentId) {
-    const extracter = await getExtracter();
+    // const extracter = await getExtracter();
     //   const documentId = crypto.randomUUID();
     const loder = await new PDFLoader(filepath, {splitPages:false})
     const doc = await loder.load()
@@ -84,28 +115,65 @@ console.log(chunks.length);
 
     let vectors = []
 
-    for (let i = 0; i < chunks.length; i++) {
-      const embedding = await extracter(
-        "search_document: " + chunks[i].pageContent,
-        {
-            pooling:"mean",
-            normalize:true
-        }
-      )
+//     for (let i = 0; i < chunks.length; i++) {
+//       const embedding = await extracter(
+//         "search_document: " + chunks[i].pageContent,
+//         {
+//             pooling:"mean",
+//             normalize:true
+//         }
+//       )
 
-      const vector = embedding.tolist()[0]
- vectors.push({
-  id: crypto.randomUUID(),
-  vector:vector,
-  payload:{
-   text:chunks[i].pageContent,
-      sessionid: sessionid,
-    documentId: documentId,
-    fileHash:fileHash
-  }
-})
+//       const vector = embedding.tolist()[0]
+//  vectors.push({
+//   id: crypto.randomUUID(),
+//   vector:vector,
+//   payload:{
+//    text:chunks[i].pageContent,
+//       sessionid: sessionid,
+//     documentId: documentId,
+//     fileHash:fileHash
+//   }
+// })
         
-    }
+//     }
+
+const batchSize = 20;
+
+for (let i = 0; i < chunks.length; i += batchSize) {
+  const batch = chunks.slice(i, i + batchSize);
+
+  const texts = batch.map(
+    (chunk) => chunk.pageContent
+  );
+
+  const embeddings = await getNomicEmbeddings(
+    texts,
+    "search_document"
+  );
+
+  for (let j = 0; j < batch.length; j++) {
+    vectors.push({
+      id: crypto.randomUUID(),
+
+      vector: embeddings[j],
+
+      payload: {
+        text: batch[j].pageContent,
+        sessionid: sessionid,
+        documentId: documentId,
+        fileHash: fileHash,
+      },
+    });
+  }
+
+  console.log(
+    `Embedded ${Math.min(
+      i + batch.length,
+      chunks.length
+    )}/${chunks.length}`
+  );
+}
 
     console.log(vectors.length);
 
@@ -118,16 +186,17 @@ console.log(chunks.length);
     
 }
 
- export async function searchdocuments(query, sessionid, documentId) {
-    const extracter = await getExtracter();
-    const embedding = await extracter(
-        "search_query: " + query,
-        {
-            pooling:"mean",
-            normalize:true
-        }
-    )
-    const vector = embedding.tolist()[0]
+export async function searchdocuments(
+  query,
+  sessionid,
+  documentId
+) {
+  const embeddings = await getNomicEmbeddings(
+    [query],
+    "search_query"
+  );
+
+  const vector = embeddings[0];
 
     const result = await qdrant.query("kirana-data",{
        query:vector,

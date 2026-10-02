@@ -4,11 +4,14 @@ import chatbot from "./chatbot.js"
 import Razorpay from "razorpay"
 import crypto from "crypto"
 import User from "./models/User.js"
+
+
 const App = express()
 App.use(express.json())
 App.use(
   cors({
     origin: "https://genai-project-1-k67z.onrender.com",
+    origin: "http://localhost:5173",
   })
 )
 
@@ -16,6 +19,8 @@ App.use("/", chatbot)
 
 console.log("KEY:", process.env.TEST_API_KEY);
 console.log("SECRET EXISTS:", !!process.env.TEST_KEY_SECRET);
+
+
 
 const razorpay = new Razorpay({
   key_id: process.env.TEST_API_KEY,
