@@ -42,7 +42,7 @@ const plans = [
   },
   {
     name: "Pro",
-    price: "19",
+    price: "149",
     description: "More power for everyday AI usage.",
     icon: Zap,
     popular: true,
@@ -65,7 +65,7 @@ const plans = [
   },
   {
     name: "Premium",
-    price: "29",
+    price: "299",
     description: "Maximum limits for power users.",
     icon: Crown,
     popular: false,
