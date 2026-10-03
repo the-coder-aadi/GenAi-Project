@@ -245,7 +245,7 @@ chatbot.post("/user/session", async (req, res) => {
 chatbot.post("/upload-pdf", upload.single("pdf"), async (req, res) => {
     try {
 
-        console.log(req.file);
+
 
         const { sessionid } = req.body;
 
@@ -524,8 +524,6 @@ chatbot.get("/session/:sessionid", async (req, res) => {
 
     const history = await redis.get(redisKey) || [];
 
-    console.log("History Redis Key:", redisKey);
-    console.log("History:", history);
 
     res.json({
       success: true,
@@ -831,6 +829,18 @@ async function QuizAi(sessionid, documentId, quota, retrycount = 0) {
     const quizs = await getquizs(sessionid, documentId)
     console.log(quizs);
 
+
+const hasText = quizs.some(
+    item => item?.payload?.text?.trim()
+);
+
+if (!hasText) {
+    return {
+        error: true,
+        message: "No readable text found in this PDF. Please upload a text-based PDF."
+    };
+}
+
     const context = quizs
         .map((item, index) => `SOURCE ${index + 1}:\n${item.payload.text}`)
         .join("\n\n");
@@ -1109,8 +1119,7 @@ async function makeReplySameAsUser(userinput, reply) {
             input: userinput.slice(0, 1000),
         });
 
-     console.log("USER LANGUAGE:", userLanguage.language_code);
-console.log("USER SCRIPT:", userLanguage.script_code);;
+
 
 
         // 2. Agar user English mein hai
@@ -1120,15 +1129,7 @@ console.log("USER SCRIPT:", userLanguage.script_code);;
         input: reply.slice(0, 1000),
     });
 
-    console.log(
-        "REPLY LANGUAGE:",
-        replyLanguage.language_code
-    );
 
-    console.log(
-        "REPLY SCRIPT:",
-        replyLanguage.script_code
-    );
 
     if (replyLanguage.language_code === "en-IN") {
         return reply;
@@ -1141,10 +1142,7 @@ console.log("USER SCRIPT:", userLanguage.script_code);;
         target_language_code: "en-IN",
     });
 
-    console.log(
-        "SARVAM ENGLISH TRANSLATION:",
-        translated
-    );
+
 
     return translated.translated_text;
 }
@@ -1170,15 +1168,6 @@ console.log("USER SCRIPT:", userLanguage.script_code);;
                 input: reply.slice(0, 1000),
             });
 
-            console.log(
-                "REPLY LANGUAGE:",
-                replyLanguage.language_code
-            );
-
-            console.log(
-                "REPLY SCRIPT:",
-                replyLanguage.script_code
-            );
 
 
             if (
@@ -1367,7 +1356,7 @@ if (relevantResults.length === 0) {
 const context = relevantResults
     .map(result => result.payload.text)
     .join("\n\n");
-    console.log("📄 PDF CONTEXT:", context);
+   
 
     if (!context.trim()) {
         return "I couldn't find that information in the selected PDF...";
@@ -1386,9 +1375,7 @@ ${context}
         // FIRST GROQ CALL
         // =====================================================
 
-        console.log("PDF SELECTED:", pdfSelected);
-console.log("DOCUMENT ID:", documentId);
-console.log("MESSAGES SENT TO GROQ:", JSON.stringify(message, null, 2));
+
 
         const api = await groq.chat.completions.create({
 
@@ -1515,8 +1502,8 @@ if (tool.function.name === "WebSearch") {
             funcargument
         );
 
-    console.log("WEB SEARCH RESULT:");
-    console.log(toolresult);
+
+   
 }
 
 

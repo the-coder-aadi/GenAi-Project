@@ -183,6 +183,7 @@ for (let i = 0; i < chunks.length; i += batchSize) {
     })
 
     console.log("embeddings store in vector db");
+   
     
 }
 
