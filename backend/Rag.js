@@ -102,9 +102,11 @@ async function getNomicEmbeddings(texts, taskType) {
 export async function storedocument(filepath, sessionid, fileHash, documentId) {
     // const extracter = await getExtracter();
     //   const documentId = crypto.randomUUID();
+
     const loder = await new PDFLoader(filepath, {splitPages:false})
     const doc = await loder.load()
-
+    console.log("DOCS LENGTH:", doc.length);
+console.log("DOCS:", doc);
     const spliter = await new RecursiveCharacterTextSplitter({
         chunkSize:500,
         chunkOverlap:100
@@ -175,7 +177,10 @@ for (let i = 0; i < chunks.length; i += batchSize) {
   );
 }
 
-    console.log(vectors.length);
+  
+    console.log("CHUNKS:", chunks.length);
+console.log("VECTORS:", vectors.length);
+console.log("FIRST VECTOR:", vectors[0]);
 
     await qdrant.upsert("kirana-data", {
         wait:true,

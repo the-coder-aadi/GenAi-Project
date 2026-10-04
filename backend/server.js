@@ -11,6 +11,7 @@ App.use(express.json())
 App.use(
   cors({
     origin: "https://genai-project-1-k67z.onrender.com",
+    origin: "http://localhost:5173"
   })
 )
 

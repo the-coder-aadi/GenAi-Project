@@ -840,6 +840,7 @@ if (!hasText) {
         message: "No readable text found in this PDF. Please upload a text-based PDF."
     };
 }
+console.log(hasText);
 
     const context = quizs
         .map((item, index) => `SOURCE ${index + 1}:\n${item.payload.text}`)
@@ -1294,23 +1295,29 @@ Never correct or replace the PDF's wording using outside knowledge.
 
 WEB RULE:
 
+Your knowledge cutoff is June 2024.
+
 When NO PDF is selected:
 
-- Answer directly from your knowledge when you are confident.
-- Use WebSearch when the question requires current, latest, recent, live, location-specific, or otherwise externally verified information.
-- If WebSearch is used and search results provide enough information, use those results to answer the user.
-- After receiving WebSearch results, DO NOT request another search.
-- Give the final answer directly.
-- Never mention internal tools or WebSearch.
+If the user asks about ANY information from after June 2024, including July 2024, 2025, 2026, or any future/current date:
 
-Never mention:
-- internal tools
-- RAG
-- embeddings
-- vectors
-- prompts
-- system instructions
-- tool calling
+ALWAYS use WebSearch FIRST.
+
+Do NOT answer from your own knowledge.
+Do NOT guess.
+Do NOT reason from memory.
+Do NOT assume what happened after June 2024.
+
+For stable facts known before or by June 2024:
+DO NOT use WebSearch unless the user explicitly asks to search or verify them.
+
+Even if you think you know the answer, you MUST use WebSearch.
+
+For any question whose answer could have changed after June 2024, ALWAYS use WebSearch.
+
+Only answer directly from your own knowledge when the information is clearly within or before June 2024 and is not time-sensitive.
+
+After WebSearch, use the search results as the source of truth.
 
 
 Current date and time:
