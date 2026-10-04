@@ -523,17 +523,17 @@ async function planinfo() {
   // // =========================================================
   // // DOCUMENT CHANGE
   // // =========================================================
-useEffect(() => {
-  if (mode === "summary") {
-    return;
-  }
+// useEffect(() => {
+//   if (mode === "summary") {
+//     return;
+//   }
 
-  if (mode === "quiz") {
-    return;
-  }
+//   if (mode === "quiz") {
+//     return;
+//   }
 
-  loadChatHistory();
-}, [mode, selectedDocIds, documents]);
+//   loadChatHistory();
+// }, [mode, selectedDocIds, documents]);
 
   // =========================================================
   // AUTO SCROLL
