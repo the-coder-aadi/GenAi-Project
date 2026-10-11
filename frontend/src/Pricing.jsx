@@ -155,7 +155,7 @@ const handlepayment = async (plan) => {
 
       handler: async function (response) {
         console.log("Payment response:", response);
-
+throw new Error("Testing webhook - verify intentionally failed");
         try {
           // 3. Payment verification
           const verifyResponse = await fetch(
