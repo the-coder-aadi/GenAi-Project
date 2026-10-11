@@ -57,7 +57,10 @@ const groq = new Groq({
 
 
 const upload = multer({
-    dest: "uploads/"
+    dest: "uploads/",
+     limits: {
+    fileSize: 10 * 1024 * 1024
+  }
 })
 
 async function checkQuota(ip, sessionid) {
@@ -117,6 +120,7 @@ async function checkQuota(ip, sessionid) {
             }
         );
     }
+
 
     // =========================
     // REQUEST LIMITS
@@ -207,30 +211,44 @@ async function updateQuota(quota, usedTokens) {
     );
 }
 
-chatbot.post("/user/session", async (req, res) => {
-  try {
-    const { sessionId } = req.body;
 
+
+chatbot.get("/user/session", async (req, res) => {
+  try {
+    let sessionId = req.cookies.sessionId;
+
+    // First time user
     if (!sessionId) {
-      return res.status(400).json({
-        success: false,
-        message: "Session ID is required",
+      sessionId = crypto.randomBytes(32).toString("hex");
+
+      await User.create({
+        sessionId,
+      });
+
+      res.cookie("sessionId", sessionId, {
+        httpOnly: true,
+        secure: true,
+        sameSite: "none",
+        maxAge: 1000 * 60 * 60 * 24 * 30,
       });
     }
 
-    let user = await User.findOne({ sessionId });
+    // Existing session verify
+    const user = await User.findOne({ sessionId });
 
     if (!user) {
-      user = await User.create({
-        sessionId: sessionId,
-        // plan automatically "free" hoga
+      return res.status(401).json({
+        success: false,
+        message: "Invalid session",
       });
     }
 
     res.json({
       success: true,
       plan: user.plan,
+      sessionId, 
     });
+
   } catch (error) {
     console.error("Session error:", error);
 
@@ -241,95 +259,151 @@ chatbot.post("/user/session", async (req, res) => {
   }
 });
 
-
 chatbot.post("/upload-pdf", upload.single("pdf"), async (req, res) => {
-    try {
+      let qdrantDone = false;
+let cloudinaryDone = false;
+ let sessionId = null;
+  let documentId = null;
+  try {
 
 
+     sessionId = req.cookies.sessionId;
 
-        const { sessionid } = req.body;
-
-        const filebuffer = await fs.readFile(req.file.path);
-
-        const fileHash = crypto
-            .createHash("sha256")
-            .update(filebuffer)
-            .digest("hex");
-
-        const duplicate = await isDuplicate(sessionid, fileHash);
-
-        if (duplicate) {
-            return res.json({
-                success: false,
-                message: "Ye PDF already upload ki ja chuki hai."
-            });
-        }
-
-        const filepath = req.file.path;
-
-        const documentId = crypto.randomUUID();
-
-
-        // 1️⃣ PDF Cloudinary par upload
-        const cloudinaryResult = await cloudinary.uploader.upload(
-            filepath,
-            {
-                resource_type: "raw",
-                folder: "genai-pdfs",
-                public_id: documentId
-            }
-        );
-
-        await Document.create({
-    documentId,
-    sessionid,
-    name: req.file.originalname,
-    size: req.file.size,
-    cloudinaryUrl: cloudinaryResult.secure_url,
-    fileHash
-});
-
-
-//  res.json({
-//     success: true,
-//     message: "PDF uploaded successfully",
-//     filename: req.file.originalname,
-//     documentId: documentId
-// });
-
-storedocument(
-    filepath,
-    sessionid,
-    fileHash,
-    documentId
-).catch((error) => {
-    console.error("PDF processing failed:", error);
-});
-
-console.log("SENDING UPLOAD SUCCESS RESPONSE");
-       return res.json({
-            success: true,
-            message: "PDF uploaded successfully",
-            filename: req.file.originalname,
-            documentId: documentId
-        });
-
-    } catch (error) {
-
-        console.log(error);
-
-        res.status(500).json({
-            success: false,
-            message: "PDF upload failed"
-        });
+    if (!sessionId) {
+      return res.status(401).json({
+        success: false,
+        message: "Session not found"
+      });
     }
+
+    const documentCount = await Document.countDocuments({
+  sessionid: sessionId
 });
 
-chatbot.post("/summaries", async (req,res)=>{
-       try {
-   const ip = req.ip;
- const {documentId, sessionid, offset = 0} = req.body
-    const quota = await checkQuota(ip, sessionid);
+if (documentCount >= 5) {
+  return res.status(400).json({
+    success: false,
+    limitExceeded: true,
+    message: "Maximum 5 PDFs allowed."
+  });
+}
+
+    const filebuffer = await fs.readFile(req.file.path);
+
+    const fileHash = crypto
+      .createHash("sha256")
+      .update(filebuffer)
+      .digest("hex");
+
+    const duplicate = await isDuplicate(sessionId, fileHash);
+
+    if (duplicate) {
+      return res.json({
+        success: false,
+        message: "Ye PDF already upload ki ja chuki hai."
+      });
+    }
+
+
+
+    const filepath = req.file.path;
+
+     documentId = crypto.randomUUID();
+   
+
+    await storedocument(
+      filepath,
+      sessionId,
+      fileHash,
+      documentId
+    )
+    qdrantDone = true
+
+        // PDF Cloudinary par upload
+    const cloudinaryResult = await cloudinary.uploader.upload(
+      filepath,
+      {
+        resource_type: "raw",
+        folder: "genai-pdfs",
+        public_id: documentId
+      }
+    );
+    cloudinaryDone = true
+
+    await Document.create({
+      documentId,
+      sessionid: sessionId,
+      name: req.file.originalname,
+      size: req.file.size,
+      cloudinaryUrl: cloudinaryResult.secure_url,
+      fileHash
+    });
+
+
+    console.log("SENDING UPLOAD SUCCESS RESPONSE");
+
+    return res.json({
+      success: true,
+      message: "PDF uploaded successfully",
+      filename: req.file.originalname,
+      documentId: documentId
+    });
+
+  } catch (error) {
+
+    console.log(error);
+
+  if (qdrantDone) {
+  console.log("ROLLBACK: deleting Qdrant vectors", {
+    sessionId,
+    documentId
+  });
+
+  await deleteDocumentVectors(
+    documentId,
+    sessionId
+  );
+
+  console.log("ROLLBACK: Qdrant delete completed");
+}
+
+  // Rollback Cloudinary
+  if (cloudinaryDone) {
+    await cloudinary.uploader.destroy(
+      `genai-pdfs/${documentId}`,
+      {
+        resource_type: "raw"
+      }
+    );
+  }
+
+    res.status(500).json({
+      success: false,
+      message: "PDF upload failed"
+    });
+  }
+});
+
+
+chatbot.post("/summaries", async (req, res) => {
+  try {
+    const ip = req.ip;
+
+    const {
+      documentId,
+      offset = 0
+    } = req.body;
+
+    const sessionId = req.cookies.sessionId;
+
+    if (!sessionId) {
+      return res.status(401).json({
+        success: false,
+        message: "Session not found."
+      });
+    }
+
+    const quota = await checkQuota(ip, sessionId);
 
     if (!quota.allowed) {
       return res.json({
@@ -341,8 +415,8 @@ chatbot.post("/summaries", async (req,res)=>{
       });
     }
 
-       
-          if (Array.isArray(documentId)) {
+    if (Array.isArray(documentId)) {
+
       if (documentId.length === 0) {
         return res.status(400).json({
           success: false,
@@ -359,42 +433,55 @@ chatbot.post("/summaries", async (req,res)=>{
     }
 
     const result = await SummaryAi(
-      sessionid,
+      sessionId,
       documentId,
       quota,
-        offset
-      
+      offset
     );
 
     await summary.create({
-        sessionid,
-         documentId,
-        offset,
-        text:result.summary,
-        progress:result.progress
-    })
+      sessionid: sessionId,
+      documentId,
+      offset,
+      text: result.summary,
+      progress: result.progress
+    });
 
     return res.json({
-  success: true,
-  mode: "summary",
-  summary: result
+      success: true,
+      mode: "summary",
+      summary: result
+    });
+
+  } catch (error) {
+    console.log(
+      error,
+      "error aa raha hai kuch to summary wale mai"
+    );
+
+    return res.status(500).json({
+      success: false,
+      message: "Could not generate summary."
+    });
+  }
 });
 
-       } catch (error) {
-        console.log(error, "error aa raha hai kuch to summary wale mai");
-        
-       }
-})
-
-
 chatbot.get(
-  "/summaries/:sessionid/:documentId",
+  "/summaries/:documentId",
   async (req, res) => {
     try {
-      const { sessionid, documentId } = req.params;
+      const { documentId } = req.params;
+      const sessionId = req.cookies.sessionId;
+
+      if (!sessionId) {
+        return res.status(401).json({
+          success: false,
+          message: "Session not found."
+        });
+      }
 
       const summaries = await summary.find({
-        sessionid,
+        sessionid: sessionId,
         documentId
       }).sort({ createdAt: 1 });
 
@@ -415,11 +502,21 @@ chatbot.get(
 );
 
 
-chatbot.get("/documents/:sessionid", async (req, res) => {
+chatbot.get("/documents", async (req, res) => {
   try {
-    const { sessionid } = req.params;
+    const sessionId = req.cookies.sessionId;
 
-    const documents = await Document.find({ sessionid });
+    if (!sessionId) {
+      return res.status(401).json({
+        success: false,
+        documents: [],
+        message: "Session not found.",
+      });
+    }
+
+    const documents = await Document.find({
+      sessionid: sessionId,
+    });
 
     res.json({
       success: true,
@@ -440,11 +537,26 @@ chatbot.patch("/documents/:documentId/select", async (req, res) => {
   try {
     const { documentId } = req.params;
     const { selected } = req.body;
+    const sessionId = req.cookies.sessionId;
+
+    if (!sessionId) {
+      return res.status(401).json({
+        success: false,
+        message: "Session not found",
+      });
+    }
 
     const document = await Document.findOneAndUpdate(
-      { documentId },
-      { selected },
-      { new: true }
+      {
+        documentId,
+        sessionid: sessionId,
+      },
+      {
+        selected,
+      },
+      {
+        new: true,
+      }
     );
 
     if (!document) {
@@ -472,11 +584,18 @@ chatbot.patch("/documents/:documentId/select", async (req, res) => {
 const Tavily = new tavily({
     apiKey: process.env.TAVILY_API_KEY
 })
-
-chatbot.get("/session/:sessionid", async (req, res) => {
+chatbot.get("/session", async (req, res) => {
   try {
-    const { sessionid } = req.params;
+    const sessionId = req.cookies.sessionId;
     const { mode, quizType } = req.query;
+
+    if (!sessionId) {
+      return res.status(401).json({
+        success: false,
+        history: [],
+        message: "Session not found"
+      });
+    }
 
     let redisKey;
 
@@ -487,11 +606,11 @@ chatbot.get("/session/:sessionid", async (req, res) => {
     if (mode === "quiz") {
 
       if (quizType === "random") {
-        redisKey = `quiz:random:${sessionid}`;
+        redisKey = `quiz:random:${sessionId}`;
       }
 
       else if (quizType === "pdf") {
-        redisKey = `quiz:pdf:${sessionid}`;
+        redisKey = `quiz:pdf:${sessionId}`;
       }
 
       else {
@@ -507,7 +626,7 @@ chatbot.get("/session/:sessionid", async (req, res) => {
     // =========================
 
     else if (mode === "summary") {
-      redisKey = `summary:${sessionid}`;
+      redisKey = `summary:${sessionId}`;
     }
 
     // =========================
@@ -515,7 +634,7 @@ chatbot.get("/session/:sessionid", async (req, res) => {
     // =========================
 
     else {
-      redisKey = sessionid;
+      redisKey = sessionId;
     }
 
     // =========================
@@ -523,7 +642,6 @@ chatbot.get("/session/:sessionid", async (req, res) => {
     // =========================
 
     const history = await redis.get(redisKey) || [];
-
 
     res.json({
       success: true,
@@ -540,16 +658,23 @@ chatbot.get("/session/:sessionid", async (req, res) => {
   }
 });
 
-
 chatbot.delete(
-  "/documents/:sessionid/:documentId",
+  "/documents/:documentId",
   async (req, res) => {
     try {
-      const { sessionid, documentId } = req.params;
+      const { documentId } = req.params;
+      const sessionId = req.cookies.sessionId;
 
-      // MongoDB se document delete
+      if (!sessionId) {
+        return res.status(401).json({
+          success: false,
+          message: "Session not found.",
+        });
+      }
+
+      // MongoDB se sirf current user's document delete hoga
       const document = await Document.findOneAndDelete({
-        sessionid,
+        sessionid: sessionId,
         documentId,
       });
 
@@ -560,7 +685,7 @@ chatbot.delete(
         });
       }
 
-      await deleteDocumentVectors(documentId)
+      await deleteDocumentVectors(documentId, sessionId);
 
       return res.json({
         success: true,
@@ -580,19 +705,27 @@ chatbot.delete(
 
 
 chatbot.delete(
-  "/clearsummary/:sessionid/:documentId",
+  "/clearsummary/:documentId",
   async (req, res) => {
     try {
-      const { sessionid, documentId } = req.params;
+      const { documentId } = req.params;
+      const sessionId = req.cookies.sessionId;
+
+      if (!sessionId) {
+        return res.status(401).json({
+          success: false,
+          message: "Session not found.",
+        });
+      }
 
       await summary.deleteMany({
-        sessionid,
-        documentId
+        sessionid: sessionId,
+        documentId,
       });
 
       return res.json({
         success: true,
-        message: "Summary cleared successfully."
+        message: "Summary cleared successfully.",
       });
 
     } catch (error) {
@@ -600,20 +733,36 @@ chatbot.delete(
 
       return res.status(500).json({
         success: false,
-        message: "Could not clear summary."
+        message: "Could not clear summary.",
       });
     }
   }
 );
 
+
 chatbot.post("/sendmsg", async (req, res) => {
-    const ip = req.ip
-    try {
-   const { query, sessionid, documentId, mode, quizType } = req.body
-         const quota = await checkQuota(ip, sessionid);
+  const ip = req.ip;
+
+  try {
+    const {
+      query,
+      documentId,
+      mode,
+      quizType
+    } = req.body;
+
+    const sessionId = req.cookies.sessionId;
+
+    if (!sessionId) {
+      return res.status(401).json({
+        success: false,
+        message: "Session not found."
+      });
+    }
+
+    const quota = await checkQuota(ip, sessionId);
 
     if (!quota.allowed) {
-        
       return res.json({
         success: false,
         quotaExceeded: true,
@@ -623,87 +772,118 @@ chatbot.post("/sendmsg", async (req, res) => {
       });
     }
 
-        console.log("SENDMSG HIT");
-        console.log("BODY:", req.body);
-     
-        console.log("mode:", mode);
-        console.log("quizType:", quizType);
-        if (mode === "quiz") {
-            console.log("quiz mode wala chalega");
+    console.log("SENDMSG HIT");
+    console.log("mode:", mode);
+    console.log("quizType:", quizType);
 
-            if (quizType == "pdf") {
-                console.log("quiz mode wale ka pdf type wala chalega");
+    // =========================
+    // QUIZ MODE
+    // =========================
 
-                if (!Array.isArray(documentId) || documentId.length === 0) {
-                    return res.json({
-                        success: false,
-                        mode: "quiz",
-                        msg: "Please select a PDF before starting the quiz."
-                    });
-                }
+    if (mode === "quiz") {
 
-                const result = await QuizAi(sessionid, documentId,quota)
+      // PDF QUIZ
+      if (quizType === "pdf") {
 
-                if (result.error) {
-                    return res.json({
-                        success: true,
-                        mode: "quiz",
-                        type: "retry",
-                        quiztype: quizType,
-                        aimsg: result.message
-                    });
-                }
-
-                return res.json({
-                    success: true,
-                    aimsg: result,
-                    type: "question",
-                    mode: mode,
-                    quiztype: quizType
-                })
-            }
-            if (quizType == "random") {
-                console.log("quiz mode wale ka random type wala chalega");
-                const result = await RandomAi(sessionid, documentId, quota)
-                if (result.error) {
-                    return res.json({
-                        success: true,
-                        mode: "quiz",
-                        type: "retry",
-                        quiztype: quizType,
-                        aimsg: result.message
-                    });
-                }
-
-                return res.json({
-                    success: true,
-                    aimsg: result,
-                    type: "question",
-                    mode: mode,
-                    quizTyp: quizType
-                })
-            }
+        if (!Array.isArray(documentId) || documentId.length === 0) {
+          return res.json({
+            success: false,
+            mode: "quiz",
+            msg: "Please select a PDF before starting the quiz."
+          });
         }
-        console.log("normal chat type wala chalega");
-        const result = await ChatAi(query, sessionid, documentId,quota)
-        res.json({
+
+        const result = await QuizAi(
+          sessionId,
+          documentId,
+          quota
+        );
+
+        if (result.error) {
+          return res.json({
             success: true,
-            aimsg: result,
-            mode: mode,
-            quiztype: quizType
-        })
+            mode: "quiz",
+            type: "retry",
+            quiztype: quizType,
+            aimsg: result.message
+          });
+        }
 
-    } catch (error) {
-        res.json({
-            success: false
-        })
-        console.log("error aa rha hai kuch to sendmsg api mai ", error);
+        return res.json({
+          success: true,
+          aimsg: result,
+          type: "question",
+          mode,
+          quiztype: quizType
+        });
+      }
 
+      // RANDOM QUIZ
+      if (quizType === "random") {
+
+        const result = await RandomAi(
+          sessionId,
+          documentId,
+          quota
+        );
+
+        if (result.error) {
+          return res.json({
+            success: true,
+            mode: "quiz",
+            type: "retry",
+            quiztype: quizType,
+            aimsg: result.message
+          });
+        }
+
+        return res.json({
+          success: true,
+          aimsg: result,
+          type: "question",
+          mode,
+          quiztype: quizType
+        });
+      }
     }
-})
+
+    // =========================
+    // NORMAL CHAT
+    // =========================
+
+    console.log("normal chat type wala chalega");
+
+    const result = await ChatAi(
+      query,
+      sessionId,
+      documentId,
+      quota
+    );
+
+    return res.json({
+      success: true,
+      aimsg: result,
+      mode,
+      quiztype: quizType
+    });
+
+  } catch (error) {
+
+    console.log(
+      "error aa raha hai sendmsg API mein:",
+      error
+    );
+
+    return res.status(500).json({
+      success: false,
+      message: "Something went wrong."
+    });
+  }
+});
 
 
 async function SummaryAi(sessionid, documentId, quota,  offset = 0) {
+  
     try {
      
          const result = await getSummaryChunks(
@@ -1639,7 +1819,7 @@ async function WebSearch({ query }) {
     return JSON.stringify(
         results.slice(0, 3).map(({ title, content, url }) => ({
             title,
-            summary: content.slice(0, 150),
+            summary: content.slice(0, 250),
             url
         }))
     );
