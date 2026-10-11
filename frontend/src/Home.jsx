@@ -2900,7 +2900,7 @@ if (
               />
 
               <button
-                onClick={sendmsg}
+                onClick={()=> sendmsg()}
                 disabled={!input.trim() || isTyping || quotaBlocked}
                 className="w-10 h-10 shrink-0 rounded-xl bg-gradient-to-br from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white flex items-center justify-center disabled:opacity-40 disabled:cursor-not-allowed shadow-md shadow-indigo-200 transition"
               >
