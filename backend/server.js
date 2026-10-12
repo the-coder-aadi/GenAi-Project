@@ -15,6 +15,10 @@ App.post(
   "/api/payment/webhook",
   express.raw({ type: "application/json" }),
   async (req, res) => {
+      console.log("🔥 WEBHOOK HIT");
+    console.log("BODY:", req.body.toString());
+
+    return res.status(200).send("OK");
     try {
       console.log("RAZORPAY WEBHOOK RECEIVED");
 
