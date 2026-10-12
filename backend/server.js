@@ -180,8 +180,8 @@ async function activatePayment(user, purchasedPlan) {
 App.use(express.json())
 App.use(
   cors({
-    // origin: "https://genai-project-1-k67z.onrender.com",
-origin:"http://localhost:5173",
+    origin: "https://genai-project-1-k67z.onrender.com",
+// origin:"http://localhost:5173",
 credentials: true,
   })
 )
