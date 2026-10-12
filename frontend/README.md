@@ -1,16 +1,100 @@
-# React + Vite
+# Medhā AI
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Medhā AI is an AI-powered study assistant that helps users learn from their own PDF documents.
 
-Currently, two official plugins are available:
+You can upload a PDF and then chat with it, generate quizzes from it, or get a summary of it. You can also use the app without uploading a PDF for normal AI chat and random quizzes.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## What can you do with Medhā AI?
 
-## React Compiler
+Medhā AI has three main modes:
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+### 1. Chat
 
-## Expanding the ESLint configuration
+Upload a PDF and ask questions about it.
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+The AI uses the content of the uploaded document to answer questions related to it.
+
+You can also use Chat mode without a PDF for normal conversations.
+
+### 2. Quiz
+
+You can generate quizzes from your uploaded PDFs and test your understanding of the document.
+
+There is also a random quiz option if you want to practice without uploading anything.
+
+### 3. Summary
+
+Upload a PDF and ask Medhā AI to summarize its content so you can understand the main points more quickly.
+
+---
+
+## How it works
+
+When a PDF is uploaded, its content is processed and converted into embeddings.
+
+The embeddings are stored in a vector database and are later used to find the most relevant parts of the document when the user asks a question or requests a quiz or summary.
+
+This allows the AI to work with the actual content of the uploaded PDF instead of relying only on its general knowledge.
+
+The project uses a RAG (Retrieval-Augmented Generation) approach for this.
+
+---
+
+## Tech Stack
+
+### Frontend
+
+- React
+- Vite
+- Tailwind CSS
+- React Router
+- Lucide React
+
+### Backend
+
+- Node.js
+- Express.js
+- MongoDB
+- Redis
+
+### AI
+
+- `openai/gpt-oss-20b`
+- Qdrant Vector Database
+- `nomic-embed-text-v1.5` for embeddings
+- RAG for working with uploaded documents
+- Tavily for web search
+- Sarvam AI for translation
+
+### Payments
+
+- Razorpay
+- Razorpay Webhooks
+- Test mode is currently being used
+
+---
+
+## Why RAG?
+
+A small language model cannot always remember or understand a large PDF directly.
+
+So instead of sending the complete document every time, Medhā AI retrieves the relevant parts of the document first and then gives those parts to the AI.
+
+The basic flow is:
+
+```text
+PDF Upload
+    ↓
+Extract PDF Content
+    ↓
+Create Embeddings
+    ↓
+Store in Qdrant
+    ↓
+User asks a question
+    ↓
+Find relevant document content
+    ↓
+Send relevant content to AI
+    ↓
+Generate response

@@ -36,6 +36,8 @@ const navigate = useNavigate()
   );
   const [isModeLoading, setIsModeLoading] = useState(false);
 
+  const [documentsLoading, setDocumentsLoading] = useState(true);
+
   const [quizResultOpen, setQuizResultOpen] = useState(false);
 const [quizCorrect, setQuizCorrect] = useState(false);
 
@@ -150,6 +152,7 @@ const [toastMessage, setToastMessage] = useState("");
   const [input, setInput] = useState("");
   const [isTyping, setIsTyping] = useState(false);
 
+  const [messagesLoading, setMessagesLoading] = useState(true);
   // =========================================================
   // PDF UPLOAD STATES
   // =========================================================
@@ -496,6 +499,11 @@ async function loadChatHistory() {
       getModeWelcomeMessage("chat")
     ]);
   }
+  finally {
+ 
+    setMessagesLoading(false);
+
+}
 }
   // =========================================================
   // HANDLE MODE CHANGE
@@ -768,6 +776,11 @@ async function loadDocuments() {
   } catch (error) {
     console.log("Documents load error:", error);
   }
+  finally {
+ 
+    setDocumentsLoading(false);
+
+}
 }
 
   useEffect(() => {
@@ -1817,7 +1830,29 @@ async function clearSummary(documentId) {
         </div>
 
         <div className="flex-1 overflow-y-auto px-3 pb-4 space-y-1.5">
-          {documents.length === 0 && (
+          {documentsLoading && (
+  <>
+    {[1, 2, 3, 4].map((item) => (
+      <div
+        key={item}
+        className="rounded-xl px-3 py-2.5 flex items-center gap-3"
+      >
+        {/* PDF icon skeleton */}
+        <div className="w-9 h-9 shrink-0 rounded-lg bg-gray-200 animate-pulse" />
+
+        {/* Name + size skeleton */}
+        <div className="min-w-0 flex-1 space-y-2">
+          <div className="h-3 w-3/4 rounded bg-gray-200 animate-pulse" />
+          <div className="h-2.5 w-1/2 rounded bg-gray-100 animate-pulse" />
+        </div>
+
+        {/* Right side skeleton */}
+        <div className="w-5 h-5 shrink-0 rounded-full bg-gray-100 animate-pulse" />
+      </div>
+    ))}
+  </>
+)}
+          {!documentsLoading && documents.length === 0 && (
             <div className="text-center px-4 pt-6">
               <p className="text-[12.5px] text-gray-400 leading-relaxed">
                 No documents yet. Upload one to switch into
@@ -1826,7 +1861,7 @@ async function clearSummary(documentId) {
             </div>
           )}
 
-          {documents.map((doc) => {
+          {!documentsLoading && documents.map((doc) => {
             const active =
               selectedDocIds.includes(doc.id);
 
@@ -2059,10 +2094,10 @@ async function clearSummary(documentId) {
 
         <div className="flex-1 min-w-0 overflow-y-auto overflow-x-hidden px-3 sm:px-6 py-5 space-y-4">
 
-  {isModeLoading ? (
-    <ModeSkeleton mode={mode} />
-  ) : (
-    messages.map((message, ind) => {
+ {isModeLoading || messagesLoading ? (
+  <ModeSkeleton mode={mode} />
+) : (
+  messages.map((message, ind) => {
             if (!message) return null;
 
             const isUser =
