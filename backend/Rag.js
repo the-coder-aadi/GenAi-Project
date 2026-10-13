@@ -11,18 +11,18 @@ url:process.env.QDRANT_URL,
     apiKey:process.env.QDRANT_API_KEY
 })
 
-await qdrant.createPayloadIndex("kirana-data", {
+await qdrant.createPayloadIndex("medha-ai-documents", {
     field_name: "sessionid",
     field_schema: "keyword"
 });
 
-await qdrant.createPayloadIndex("kirana-data", {
+await qdrant.createPayloadIndex("medha-ai-documents", {
     field_name: "documentId",
     field_schema: "keyword"
 });
 
 
-await qdrant.createPayloadIndex("kirana-data", {
+await qdrant.createPayloadIndex("medha-ai-documents", {
     field_name: "fileHash",
     field_schema: "keyword"
 });
@@ -76,7 +76,7 @@ async function getNomicEmbeddings(texts, taskType) {
 }
 
     export async function isDuplicate(sessionid, fileHash) {
-    const result = await qdrant.count("kirana-data", {
+    const result = await qdrant.count("medha-ai-documents", {
         filter: {
             must: [
                 {
@@ -182,7 +182,7 @@ for (let i = 0; i < chunks.length; i += batchSize) {
 console.log("VECTORS:", vectors.length);
 console.log("FIRST VECTOR:", vectors[0]);
 
-    await qdrant.upsert("kirana-data", {
+    await qdrant.upsert("medha-ai-documents", {
         wait:true,
         points:vectors
     })
@@ -206,7 +206,7 @@ export async function searchdocuments(
 
   const vector = embeddings[0];
 
-    const result = await qdrant.query("kirana-data",{
+    const result = await qdrant.query("medha-ai-documents",{
        query:vector,
        limit:3,
        with_payload:true,
@@ -238,7 +238,7 @@ export async function searchdocuments(
   sessionid,
   documentId
 ) {
-  const results = await qdrant.scroll("kirana-data", {
+  const results = await qdrant.scroll("medha-ai-documents", {
     filter: {
       must: [
         {
@@ -286,8 +286,9 @@ const totalChunks = results.length;
   };
 }
 
+
 export async function deleteDocumentVectors(documentId, sessionid) {
-  await qdrant.delete("kirana-data", {
+  await qdrant.delete("medha-ai-documents", {
     filter: {
       must: [
         {
@@ -315,7 +316,7 @@ export async function deleteDocumentVectors(documentId, sessionid) {
 
 export async function getquizs(sessionid, documentId) {
 
-    const result = await qdrant.scroll("kirana-data", {
+    const result = await qdrant.scroll("medha-ai-documents", {
         limit: 100,
         with_payload: true,
 

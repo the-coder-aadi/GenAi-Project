@@ -368,7 +368,9 @@ await activatePayment(user, purchasedPlan);
 });
 
 
+
 App.get("/user/planinfo", async (req, res) => {
+
   try {
     const sessionId = req.cookies.sessionId;
 
