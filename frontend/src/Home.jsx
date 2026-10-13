@@ -241,7 +241,9 @@ async function UsersInfo() {
     console.log(data);
   } catch (error) {
     console.log(error);
-  }
+  }finally {
+      setMessagesLoading(false);
+    }
 }
 
 
