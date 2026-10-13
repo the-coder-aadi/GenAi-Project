@@ -1,0 +1,48 @@
+.medha-splash {
+  transition: opacity var(--exit-ms, 300ms) ease;
+}
+.medha-splash[data-leaving="true"] {
+  opacity: 0;
+}
+
+@keyframes medha-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* Book glides from screen-centre down to its place in the logo */
+@keyframes medha-stage {
+  from { transform: translateY(var(--stage-offset)); }
+  to   { transform: translateY(0); }
+}
+
+/* Pages swing open around the spine (no scaling, no stretching) */
+@keyframes medha-book-left {
+  from { transform: rotateY(calc(var(--closed-angle) * -1)); }
+  to   { transform: rotateY(0deg); }
+}
+@keyframes medha-book-right {
+  from { transform: rotateY(var(--closed-angle)); }
+  to   { transform: rotateY(0deg); }
+}
+
+/* M rises out of the book (pure translation) */
+@keyframes medha-m-rise {
+  from { transform: translateY(var(--m-offset)); }
+  to   { transform: translateY(0); }
+}
+
+@keyframes medha-leaves {
+  from { opacity: 0; transform: translateY(var(--leaf-offset)); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Hand-off to the original, untouched logo image */
+@keyframes medha-show { to { opacity: 1; } }
+@keyframes medha-hide { to { opacity: 0; } }
+
+/* Reduced motion: just show the final logo */
+@media (prefers-reduced-motion: reduce) {
+  .medha-layers { display: none !important; }
+  .medha-final  { animation: none !important; opacity: 1 !important; }
+}

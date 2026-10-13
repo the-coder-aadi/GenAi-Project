@@ -36,6 +36,8 @@ const navigate = useNavigate()
   );
   const [isModeLoading, setIsModeLoading] = useState(false);
 
+  const [documentsLoading, setDocumentsLoading] = useState(true);
+
   const [quizResultOpen, setQuizResultOpen] = useState(false);
 const [quizCorrect, setQuizCorrect] = useState(false);
 
@@ -150,6 +152,7 @@ const [toastMessage, setToastMessage] = useState("");
   const [input, setInput] = useState("");
   const [isTyping, setIsTyping] = useState(false);
 
+  const [messagesLoading, setMessagesLoading] = useState(true);
   // =========================================================
   // PDF UPLOAD STATES
   // =========================================================
@@ -176,12 +179,14 @@ const [toastMessage, setToastMessage] = useState("");
   // =========================================================
   // SESSION ID
   // =========================================================
-  let sessionid = localStorage.getItem("chatid");
+  // let sessionid = localStorage.getItem("chatid");
 
-  if (!sessionid) {
-    sessionid = uuid();
-    localStorage.setItem("chatid", sessionid);
-  }
+  // if (!sessionid) {
+  //   sessionid = uuid();
+  //   localStorage.setItem("chatid", sessionid);
+  // }
+
+
   
   useEffect(()=>{
 UsersInfo()
@@ -193,10 +198,17 @@ planinfo()
 
 async function planinfo() {
   try {
-    const api = await fetch(`${import.meta.env.VITE_API_URL}/user/planinfo/${sessionid}`)
-    const res = await api.json()
+    const api = await fetch(
+      `${import.meta.env.VITE_API_URL}/user/planinfo`,
+      {
+        credentials: "include",
+      }
+    );
+
+    const res = await api.json();
     console.log(res);
-     if (res.success) {
+
+    if (res.success) {
       localStorage.setItem("currentPlan", res.data.plan);
 
       localStorage.setItem(
@@ -206,26 +218,31 @@ async function planinfo() {
     }
   } catch (error) {
     console.log(error);
-    
   }
 }
 
-  async function UsersInfo() {
-    try {
-      const api = await fetch(`${import.meta.env.VITE_API_URL}/user/session`,{
-        method:"POST",
-        headers:{
-          "Content-Type" : "application/json"
-        },
-        body:JSON.stringify({
-          sessionId :sessionid
-        })
-      })
-    } catch (error) {
-      console.log(error);
-      
+async function UsersInfo() {
+  try {
+    const api = await fetch(
+      `${import.meta.env.VITE_API_URL}/user/session`,
+      {
+        method: "GET",
+        credentials: "include",
+      }
+    );
+
+    const data = await api.json();
+
+    if (!api.ok) {
+      console.error(data.message);
+      return;
     }
+
+    console.log(data);
+  } catch (error) {
+    console.log(error);
   }
+}
 
 
   useEffect(() => {
@@ -319,29 +336,33 @@ async function planinfo() {
     });
   }
 
-  async function updateDocumentSelection(documentId, selected) {
-    try {
-      const response = await fetch(
-        `${import.meta.env.VITE_API_URL}/documents/${documentId}/select`,
-        {
-          method: "PATCH",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            selected: selected,
-          }),
-        }
-      );
+async function updateDocumentSelection(documentId, selected) {
+  try {
+    const response = await fetch(
+      `${import.meta.env.VITE_API_URL}/documents/${documentId}/select`,
+      {
+        method: "PATCH",
 
-      const data = await response.json();
+        headers: {
+          "Content-Type": "application/json",
+        },
 
-      console.log("Selection updated:", data);
+        credentials: "include",
 
-    } catch (error) {
-      console.log("Selection update error:", error);
-    }
+        body: JSON.stringify({
+          selected: selected,
+        }),
+      }
+    );
+
+    const data = await response.json();
+
+    console.log("Selection updated:", data);
+
+  } catch (error) {
+    console.log("Selection update error:", error);
   }
+}
 
   function formatSize(bytes) {
     if (!bytes) return "";
@@ -446,36 +467,44 @@ async function planinfo() {
   }
 
 
-  async function loadChatHistory() {
-    try {
-      const response = await fetch(
-        `${import.meta.env.VITE_API_URL}/session/${sessionid}?mode=chat`
-      );
-
-      const data = await response.json();
-
-      if (data.success && data.history.length > 0) {
-        setmessages(
-          data.history.map(item => ({
-            sender: item.role === "user" ? "user" : "bot",
-            text: item.content,
-            time: item.time || ""
-          }))
-        );
-      } else {
-        setmessages([
-          getModeWelcomeMessage("chat")
-        ]);
+async function loadChatHistory() {
+  try {
+    const response = await fetch(
+      `${import.meta.env.VITE_API_URL}/session?mode=chat`,
+      {
+        credentials: "include",
       }
+    );
 
-    } catch (error) {
-      console.log("Chat history load error:", error);
+    const data = await response.json();
 
+    if (data.success && data.history.length > 0) {
+      setmessages(
+        data.history.map(item => ({
+          sender: item.role === "user" ? "user" : "bot",
+          text: item.content,
+          time: item.time || ""
+        }))
+      );
+    } else {
       setmessages([
         getModeWelcomeMessage("chat")
       ]);
     }
+
+  } catch (error) {
+    console.log("Chat history load error:", error);
+
+    setmessages([
+      getModeWelcomeMessage("chat")
+    ]);
   }
+  finally {
+ 
+    setMessagesLoading(false);
+
+}
+}
   // =========================================================
   // HANDLE MODE CHANGE
   // =========================================================
@@ -583,51 +612,74 @@ function validateAndSetFile(file) {
   // =========================================================
 
   async function uploadPdf() {
-    if (!pdfFile) return;
+    console.log("UPLOAD BUTTON CLICKED");
+  if (!pdfFile) return;
 
-    setUploading(true);
+  const maxSize = 10 * 1024 * 1024; // 10 MB
 
-    try {
-      const formData = new FormData();
+  if (pdfFile.size > maxSize) {
+    setToastMessage("PDF size cannot be more than 10MB.");
+  setToastOpen(true);
 
-      formData.append("pdf", pdfFile);
-      formData.append("sessionid", sessionid);
+  return;
 
-      const api = await fetch(`${import.meta.env.VITE_API_URL}/upload-pdf`, {
+    return;
+  }
+
+  setUploading(true);
+
+
+  try {
+    const formData = new FormData();
+
+    formData.append("pdf", pdfFile);
+
+    const api = await fetch(
+      `${import.meta.env.VITE_API_URL}/upload-pdf`,
+      {
         method: "POST",
         body: formData,
-      });
-
-      const res = await api.json();
-
-      if (res.success) {
-        const newDoc = {
-          id: res.documentId,
-          name: pdfFile.name,
-          size: pdfFile.size,
-          uploadedAt: new Date(),
-        };
-
-        setDocuments((prev) => [newDoc, ...prev]);
-
-
-        setPdfFile(null);
-      } else {
-        alert(res.message || "PDF upload failed");
+        credentials: "include",
       }
-    } catch (error) {
-      console.log(
-        error,
-        "error aa raha hai PDF upload karne par"
-      );
+    );
 
-      alert(
-        "Could not reach the server. Is the backend running?"
-      );
-    } finally {
-      setUploading(false);
+    const res = await api.json();
+
+if (res.limitExceeded) {
+  setToastMessage("You can upload maximum 5 PDFs.");
+  setToastOpen(true);
+  return;
+}
+
+    if (res.success) {
+      const newDoc = {
+        id: res.documentId,
+        name: pdfFile.name,
+        size: pdfFile.size,
+        uploadedAt: new Date(),
+      };
+
+      setDocuments((prev) => [newDoc, ...prev]);
+
+      setPdfFile(null);
+    } else {
+      alert(res.message || "PDF upload failed");
     }
+
+  } catch (error) {
+    console.log(
+      error,
+      "error aa raha hai PDF upload karne par"
+    );
+
+    alert(
+      "Could not reach the server. Is the backend running?"
+    );
+
+  } finally {
+    setUploading(false);
   }
+}
 
   // =========================================================
   // REMOVE DOCUMENT
@@ -636,9 +688,10 @@ function validateAndSetFile(file) {
 async function removeDocument(documentId) {
   try {
     const response = await fetch(
-      `${import.meta.env.VITE_API_URL}/documents/${sessionid}/${documentId}`,
+      `${import.meta.env.VITE_API_URL}/documents/${documentId}`,
       {
         method: "DELETE",
+        credentials: "include",
       }
     );
 
@@ -664,61 +717,71 @@ async function removeDocument(documentId) {
   }
 }
 
-  async function loadQuizHistory(type) {
-    try {
-      const response = await fetch(
-        `${import.meta.env.VITE_API_URL}/session/${sessionid}?mode=quiz&quizType=${type}`
-      );
-
-      const data = await response.json();
-
-      console.log("Quiz history:", data);
-
-      return data.history || [];
-
-    } catch (error) {
-      console.log("Quiz history load error:", error);
-
-      return [];
-    }
-  }
-
-  async function loadDocuments() {
-    try {
-       console.log("FRONTEND SESSION ID:", sessionid);
-      const response = await fetch(
-        `${import.meta.env.VITE_API_URL}/documents/${sessionid}`
-      );
-
-      const data = await response.json();
-
-      console.log("Documents from MongoDB:", data);
-
-      if (data.success) {
-
-        // PDFs frontend mein load karo
-        setDocuments(
-          data.documents.map((doc) => ({
-            id: doc.documentId,
-            name: doc.name,
-            size: doc.size,
-            cloudinaryUrl: doc.cloudinaryUrl,
-          }))
-        );
-
-        // MongoDB se selected PDFs nikalo
-        const selectedIds = data.documents
-          .filter((doc) => doc.selected === true)
-          .map((doc) => doc.documentId);
-
-        // Selected PDFs ko frontend state mein restore karo
-        setSelectedDocIds(selectedIds);
+async function loadQuizHistory(type) {
+  try {
+    const response = await fetch(
+      `${import.meta.env.VITE_API_URL}/session?mode=quiz&quizType=${type}`,
+      {
+        credentials: "include",
       }
+    );
 
-    } catch (error) {
-      console.log("Documents load error:", error);
-    }
+    const data = await response.json();
+
+    console.log("Quiz history:", data);
+
+    return data.history || [];
+
+  } catch (error) {
+    console.log("Quiz history load error:", error);
+
+    return [];
   }
+}
+
+async function loadDocuments() {
+  try {
+    const response = await fetch(
+      `${import.meta.env.VITE_API_URL}/documents`,
+      {
+        credentials: "include",
+      }
+    );
+
+    const data = await response.json();
+
+    console.log("Documents from MongoDB:", data);
+
+    if (data.success) {
+
+      // PDFs frontend mein load karo
+      setDocuments(
+        data.documents.map((doc) => ({
+          id: doc.documentId,
+          name: doc.name,
+          size: doc.size,
+          cloudinaryUrl: doc.cloudinaryUrl,
+        }))
+      );
+
+      // MongoDB se selected PDFs nikalo
+      const selectedIds = data.documents
+        .filter((doc) => doc.selected === true)
+        .map((doc) => doc.documentId);
+
+      // Selected PDFs ko frontend state mein restore karo
+      setSelectedDocIds(selectedIds);
+    }
+
+  } catch (error) {
+    console.log("Documents load error:", error);
+  }
+  finally {
+ 
+    setDocumentsLoading(false);
+
+}
+}
 
   useEffect(() => {
     loadDocuments();
@@ -932,12 +995,11 @@ async function removeDocument(documentId) {
           headers: {
             "Content-Type": "application/json"
           },
-
-          body: JSON.stringify({
-            sessionid,
-            documentId: selectedDocIds[0],
-            offset
-          })
+credentials: "include",
+        body: JSON.stringify({
+  documentId: selectedDocIds[0],
+  offset
+})
         }
       );
 
@@ -1126,10 +1188,12 @@ async function removeDocument(documentId) {
 
       const pdfName = selectedDocument?.name || "Selected PDF";
 
-      const response = await fetch(
-        `${import.meta.env.VITE_API_URL}/summaries/${sessionid}/${documentId}`
-      );
-
+    const response = await fetch(
+  `${import.meta.env.VITE_API_URL}/summaries/${documentId}`,
+  {
+    credentials: "include",
+  }
+);
       const data = await response.json();
 
       if (!data.success) return;
@@ -1221,32 +1285,32 @@ async function removeDocument(documentId) {
 
     setIsTyping(true);
 
-    try {
-      const api = await fetch(
-        `${import.meta.env.VITE_API_URL}/sendmsg`,
-        {
-          method: "POST",
+try {
+  const api = await fetch(
+    `${import.meta.env.VITE_API_URL}/sendmsg`,
+    {
+      method: "POST",
 
-          headers: {
-            "Content-Type": "application/json",
-          },
+      headers: {
+        "Content-Type": "application/json",
+      },
 
-          body: JSON.stringify({
-            query:
-              mode === "quiz"
-                ? null
-                : userMessage,
+      credentials: "include",
 
-            sessionid: sessionid,
+      body: JSON.stringify({
+        query:
+          mode === "quiz"
+            ? null
+            : userMessage,
 
-            documentId: selectedDocIds,
+        documentId: selectedDocIds,
 
-            mode: mode,
+        mode: mode,
 
-            quizType: selectedQuizType,
-          }),
-        }
-      );
+        quizType: selectedQuizType,
+      }),
+    }
+  );
 
       const res = await api.json();
 
@@ -1512,22 +1576,28 @@ async function removeDocument(documentId) {
     }
   }
 
-  async function clearSummary(documenId) {
-    try {
-      const api = await fetch(`${import.meta.env.VITE_API_URL}/clearsummary/${sessionid}/${documenId}`, {
-        method: "DELETE"
-      })
-      const res = await api.json()
-      console.log(res);
-      if (res.success) {
-        loadSummaries()
+async function clearSummary(documentId) {
+  try {
+    const api = await fetch(
+      `${import.meta.env.VITE_API_URL}/clearsummary/${documentId}`,
+      {
+        method: "DELETE",
+        credentials: "include",
       }
+    );
 
-    } catch (error) {
-      console.log(error);
+    const res = await api.json();
 
+    console.log(res);
+
+    if (res.success) {
+      loadSummaries();
     }
+
+  } catch (error) {
+    console.log(error);
   }
+}
 
   // =========================================================
   // RENDER
@@ -1709,7 +1779,7 @@ async function removeDocument(documentId) {
 </p>
 
             <p className="text-[11px] text-gray-400">
-              PDF only, up to 20MB
+              PDF only, up to 10MB
             </p>
 
             <input
@@ -1760,7 +1830,29 @@ async function removeDocument(documentId) {
         </div>
 
         <div className="flex-1 overflow-y-auto px-3 pb-4 space-y-1.5">
-          {documents.length === 0 && (
+          {documentsLoading && (
+  <>
+    {[1, 2, 3, 4].map((item) => (
+      <div
+        key={item}
+        className="rounded-xl px-3 py-2.5 flex items-center gap-3"
+      >
+        {/* PDF icon skeleton */}
+        <div className="w-9 h-9 shrink-0 rounded-lg bg-gray-200 animate-pulse" />
+
+        {/* Name + size skeleton */}
+        <div className="min-w-0 flex-1 space-y-2">
+          <div className="h-3 w-3/4 rounded bg-gray-200 animate-pulse" />
+          <div className="h-2.5 w-1/2 rounded bg-gray-100 animate-pulse" />
+        </div>
+
+        {/* Right side skeleton */}
+        <div className="w-5 h-5 shrink-0 rounded-full bg-gray-100 animate-pulse" />
+      </div>
+    ))}
+  </>
+)}
+          {!documentsLoading && documents.length === 0 && (
             <div className="text-center px-4 pt-6">
               <p className="text-[12.5px] text-gray-400 leading-relaxed">
                 No documents yet. Upload one to switch into
@@ -1769,7 +1861,7 @@ async function removeDocument(documentId) {
             </div>
           )}
 
-          {documents.map((doc) => {
+          {!documentsLoading && documents.map((doc) => {
             const active =
               selectedDocIds.includes(doc.id);
 
@@ -2002,10 +2094,10 @@ async function removeDocument(documentId) {
 
         <div className="flex-1 min-w-0 overflow-y-auto overflow-x-hidden px-3 sm:px-6 py-5 space-y-4">
 
-  {isModeLoading ? (
-    <ModeSkeleton mode={mode} />
-  ) : (
-    messages.map((message, ind) => {
+ {isModeLoading || messagesLoading ? (
+  <ModeSkeleton mode={mode} />
+) : (
+  messages.map((message, ind) => {
             if (!message) return null;
 
             const isUser =
@@ -2115,11 +2207,7 @@ async function removeDocument(documentId) {
                       </span>
                     </div>
                   </div>
-    <SmallToast
-  isOpen={toastOpen}
-  message={toastMessage}
-  onClose={() => setToastOpen(false)}
-/>
+
                 </div>
               );
             }
@@ -2751,6 +2839,12 @@ if (
                    })
   )}
 
+      <SmallToast
+  isOpen={toastOpen}
+  message={toastMessage}
+  onClose={() => setToastOpen(false)}
+/>
+
           {/* ================================================= */}
           {/* TYPING INDICATOR                                  */}
           {/* ================================================= */}
@@ -2841,7 +2935,7 @@ if (
               />
 
               <button
-                onClick={sendmsg}
+                onClick={()=> sendmsg()}
                 disabled={!input.trim() || isTyping || quotaBlocked}
                 className="w-10 h-10 shrink-0 rounded-xl bg-gradient-to-br from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white flex items-center justify-center disabled:opacity-40 disabled:cursor-not-allowed shadow-md shadow-indigo-200 transition"
               >

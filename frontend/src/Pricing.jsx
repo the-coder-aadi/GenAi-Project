@@ -130,10 +130,10 @@ const handlepayment = async (plan) => {
         headers: {
           "Content-Type": "application/json",
         },
-          body: JSON.stringify({
-      plan: plan,
-        sessionId: localStorage.getItem("chatid"),
-    }),
+        credentials: "include",
+        body: JSON.stringify({
+          plan: plan,
+        }),
       }
     );
 
@@ -149,20 +149,16 @@ const handlepayment = async (plan) => {
       key: key,
       amount: data.order.amount,
       currency: data.order.currency,
-      name: "dummary name",
+      name: "dummy name",
       description: "Pro Plan",
       order_id: data.order.id,
 
-   
       handler: async function (response) {
         console.log("Payment response:", response);
 
+
         try {
-
-          // ==========================================
-          // STEP 4: SEND PAYMENT TO BACKEND
-          // ==========================================
-
+          // 3. Payment verification
           const verifyResponse = await fetch(
             `${import.meta.env.VITE_API_URL}/api/payment/verify`,
             {
@@ -171,6 +167,8 @@ const handlepayment = async (plan) => {
               headers: {
                 "Content-Type": "application/json",
               },
+
+              credentials: "include",
 
               body: JSON.stringify({
                 razorpay_order_id:
@@ -181,57 +179,56 @@ const handlepayment = async (plan) => {
 
                 razorpay_signature:
                   response.razorpay_signature,
-                    sessionId: localStorage.getItem("chatid"),
               }),
             }
           );
 
+          const verifyData = await verifyResponse.json();
 
-          const verifyData =
-            await verifyResponse.json();
+          if (verifyData.success) {
+            console.log(
+              "Payment verified:",
+              verifyData
+            );
 
+            setPaymentSuccess(true);
 
-          // ==========================================
-          // STEP 5: CHECK VERIFICATION RESULT
-          // ==========================================
+            setPaymentMessage(
+              verifyData.message ||
+                "Payment successful and verified!"
+            );
 
-         if (verifyData.success) {
+            setPaymentPopupOpen(true);
 
-  console.log(
-    "Payment verified:",
-    verifyData
-  );
+          } else {
+            console.log(
+              "VERIFY RESPONSE:",
+              verifyData
+            );
 
-  setPaymentSuccess(true);
-  setPaymentMessage(
-    verifyData.message || "Payment successful and verified!"
-  );
-  setPaymentPopupOpen(true);
+            setPaymentSuccess(false);
 
-} else {
+            setPaymentMessage(
+              verifyData.message ||
+                "Payment verification failed"
+            );
 
-  console.log("VERIFY RESPONSE:", verifyData);
-
-  setPaymentSuccess(false);
-  setPaymentMessage(
-    verifyData.message || "Payment verification failed"
-  );
-  setPaymentPopupOpen(true);
-
-}
+            setPaymentPopupOpen(true);
+          }
 
         } catch (error) {
-
           console.error(
             "Verification error:",
             error
           );
 
-         setPaymentSuccess(false);
-setPaymentMessage(
-  "Something went wrong while verifying payment"
-);
-setPaymentPopupOpen(true);
+          setPaymentSuccess(false);
+
+          setPaymentMessage(
+            "Something went wrong while verifying payment"
+          );
+
+          setPaymentPopupOpen(true);
         }
       },
 
@@ -240,10 +237,11 @@ setPaymentPopupOpen(true);
       },
     };
 
-    // 3. Checkout open karo
+    // 4. Checkout open karo
     const razorpay = new window.Razorpay(options);
 
     razorpay.open();
+
   } catch (error) {
     console.error("Payment error:", error);
   }
@@ -676,4 +674,5 @@ const [planExpiresAt, setPlanExpiresAt] = useState(
     </main>
   );
 }
+
 

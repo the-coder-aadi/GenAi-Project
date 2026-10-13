@@ -197,6 +197,8 @@ export async function searchdocuments(
   sessionid,
   documentId
 ) {
+
+
   const embeddings = await getNomicEmbeddings(
     [query],
     "search_query"
@@ -284,7 +286,7 @@ const totalChunks = results.length;
   };
 }
 
-export async function deleteDocumentVectors(documentId) {
+export async function deleteDocumentVectors(documentId, sessionid) {
   await qdrant.delete("kirana-data", {
     filter: {
       must: [
@@ -294,11 +296,21 @@ export async function deleteDocumentVectors(documentId) {
             value: documentId,
           },
         },
+        {
+          key: "sessionid",
+          match: {
+            value: sessionid,
+          },
+        },
       ],
     },
+    wait: true,
   });
 
-  console.log("Document vectors deleted:", documentId);
+  console.log("Document vectors deleted:", {
+    documentId,
+    sessionid,
+  });
 }
 
 export async function getquizs(sessionid, documentId) {
