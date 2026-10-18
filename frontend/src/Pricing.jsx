@@ -149,8 +149,8 @@ const handlepayment = async (plan) => {
       key: key,
       amount: data.order.amount,
       currency: data.order.currency,
-      name: "dummy name",
-      description: "Pro Plan",
+      name: "Medhā AI",
+      description: plan == "premium" ? "Premium Plan" : "Pro Plan",
       order_id: data.order.id,
 
       handler: async function (response) {

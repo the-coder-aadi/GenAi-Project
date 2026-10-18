@@ -187,6 +187,21 @@ credentials: true,
 )
 App.use(cookieParser());
 
+App.use((req, res, next) => {
+  
+  const sid = req.cookies?.sessionId;
+
+  if (
+    sid !== undefined &&
+    (typeof sid !== "string" || !/^[a-f0-9]{64}$/.test(sid))
+  ) {
+    delete req.cookies.sessionId;
+
+  }
+
+  next();
+});
+
 App.use("/", chatbot)
 
 
@@ -318,12 +333,18 @@ App.post("/api/payment/verify", async (req, res) => {
       });
     }
 
-     if (user.razorpayOrderId !== razorpay_order_id) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid payment order",
-      });
-    }
+    if (user.razorpayOrderId !== razorpay_order_id) {
+  // webhook ne already plan activate kar diya ho sakta hai
+  if (user.razorpayOrderId === null && user.plan !== "free") {
+    return res.json({
+      success: true,
+      message: "Payment verified successfully",
+      paymentId: razorpay_payment_id,
+      orderId: razorpay_order_id,
+    });
+  }
+  return res.status(400).json({ success: false, message: "Invalid payment order" });
+}
 
     const purchasedPlan = user.pendingPlan;
 

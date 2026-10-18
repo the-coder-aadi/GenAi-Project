@@ -56,12 +56,18 @@ const groq = new Groq({
 })
 
 
+
 const upload = multer({
-    dest: "uploads/",
-     limits: {
+  dest: "uploads/",
+  limits: {
     fileSize: 10 * 1024 * 1024
-  }
-})
+  },
+  fileFilter: (req, file, cb) =>
+    file.mimetype === "application/pdf"
+      ? cb(null, true)
+      : cb(new Error("Only PDF allowed"))
+});
+
 
 async function checkQuota(ip, sessionid) {
 
@@ -83,8 +89,8 @@ async function checkQuota(ip, sessionid) {
 }
 
  const limits = PLAN_LIMITS[user.plan];
-    const minuteKey = `quota:${ip}:minute`;
-    const dayKey = `quota:${ip}:day`;
+  const minuteKey = `quota:${sessionid}:minute`;
+const dayKey = `quota:${sessionid}:day`;
 
     let minute = await redis.get(minuteKey);
     let day = await redis.get(dayKey);
@@ -186,28 +192,27 @@ if (minute.requests >= limits.requestsPerMinute) {
     };
 }
 
-async function updateQuota(quota, usedTokens) {
 
+async function updateQuota(quota, usedTokens) {
     quota.minute.requests += 1;
     quota.minute.tokens += usedTokens;
 
     quota.day.requests += 1;
     quota.day.tokens += usedTokens;
 
+    const minuteTtl = await redis.ttl(quota.minuteKey);
+    const dayTtl = await redis.ttl(quota.dayKey);
+
     await redis.set(
         quota.minuteKey,
         quota.minute,
-        {
-            ex: 60
-        }
+        { ex: minuteTtl > 0 ? minuteTtl : 60 }
     );
 
     await redis.set(
         quota.dayKey,
         quota.day,
-        {
-            ex: 60 * 60 * 24
-        }
+        { ex: dayTtl > 0 ? dayTtl : 86400 }
     );
 }
 
@@ -266,6 +271,12 @@ let cloudinaryDone = false;
   let documentId = null;
   try {
 
+    if (!req.file) {
+  return res.status(400).json({
+    success: false,
+    message: "PDF required"
+  });
+}
 
      sessionId = req.cookies.sessionId;
 
@@ -382,6 +393,13 @@ if (documentCount >= 5) {
       message: "PDF upload failed"
     });
   }
+  
+finally {
+  if (req.file?.path) {
+    await fs.unlink(req.file.path).catch(() => {});
+  }
+}
+
 });
 
 
@@ -513,6 +531,7 @@ chatbot.get("/documents", async (req, res) => {
         message: "Session not found.",
       });
     }
+
 
     const documents = await Document.find({
       sessionid: sessionId,
@@ -882,6 +901,120 @@ chatbot.post("/sendmsg", async (req, res) => {
 });
 
 
+chatbot.post("/checkresult", async (req, res) => {
+  try {
+    const sessionId = req.cookies.sessionId;
+    const { questionId, selectedOption, quiztype } = req.body;
+
+    // 1. Session check
+    if (!sessionId) {
+      return res.status(401).json({
+        success: false,
+        message: "Session not found.",
+      });
+    }
+
+    // 2. Required data check
+    if (!questionId || !selectedOption || !quiztype) {
+      return res.status(400).json({
+        success: false,
+        message: "Question ID, selected option and quiz type are required.",
+      });
+    }
+
+    // 3. Redis key select
+    let redisKey;
+
+    if (quiztype === "pdf") {
+      redisKey = `quiz:pdf:${sessionId}`;
+    } else if (quiztype === "random") {
+      redisKey = `quiz:random:${sessionId}`;
+    } else {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid quiz type.",
+      });
+    }
+
+    // 4. Redis se questions lao
+    const storedData = await redis.get(redisKey);
+
+    if (!storedData) {
+      return res.status(404).json({
+        success: false,
+        message: "Quiz history not found.",
+      });
+    }
+
+    const questions =
+      typeof storedData === "string"
+        ? JSON.parse(storedData)
+        : storedData;
+
+    // 5. Question ID se question dhoondho
+    const question = questions.find(
+      (item) => item.id === questionId
+    );
+
+    if (!question) {
+      return res.status(404).json({
+        success: false,
+        message: "Question not found.",
+      });
+    }
+
+    // 6. Already answered check
+if (question.answered) {
+  return res.json({
+    success: true,
+    message: "Question already answered.",
+    id: question.id,
+    answered: true,
+    selectedOption: question.selectedOption,
+    isCorrect: question.isCorrect,
+    correctOption: question.correctOption,
+  });
+}
+
+    // 7. Backend par answer check
+    const isCorrect =
+      selectedOption === question.correctOption;
+
+    // 8. Redis mein status update
+    question.answered = true;
+    question.selectedOption = selectedOption;
+    question.isCorrect = isCorrect;
+
+    await redis.set(
+      redisKey,
+      JSON.stringify(questions),
+      { ex: 60 * 60 * 24 }
+    );
+
+    // 9. Frontend ko result bhejo
+    return res.json({
+      success: true,
+      id: question.id,
+      answered: true,
+      selectedOption: question.selectedOption,
+      isCorrect: question.isCorrect,
+      correctOption: question.correctOption,
+      message: isCorrect
+        ? "Correct answer!"
+        : "Wrong answer.",
+    });
+
+  } catch (err) {
+    console.error("Check result error:", err);
+
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error.",
+    });
+  }
+});
+
+
 async function SummaryAi(sessionid, documentId, quota,  offset = 0) {
   
     try {
@@ -907,10 +1040,17 @@ console.log("CHUNKS:", chunks.length);
       };
     }
 
-
   const text = chunks
   .map(chunk => chunk.payload.text)
   .join("\n\n");
+
+  if (!text.trim()) {
+  return {
+    success: false,
+    msg:"notext",
+     message: "Unable to generate summary because no readable text was found in the retrieved PDF chunks."
+  };
+}
 
   const response = await groq.chat.completions.create({
   model: "openai/gpt-oss-20b",
@@ -1009,6 +1149,7 @@ async function QuizAi(sessionid, documentId, quota, retrycount = 0) {
     const quizs = await getquizs(sessionid, documentId)
     console.log(quizs);
 
+    
 
 const hasText = quizs.some(
     item => item?.payload?.text?.trim()
@@ -1021,6 +1162,7 @@ if (!hasText) {
     };
 }
 console.log(hasText);
+
 
     const context = quizs
         .map((item, index) => `SOURCE ${index + 1}:\n${item.payload.text}`)
@@ -1111,19 +1253,35 @@ OUTPUT FORMAT:
 
 
 
-        // Redis mein quiz save karo
-        else {
-            oldquestions.push(quiz)
-            await redis.set(
-                `quiz:pdf:${sessionid}`,
-                JSON.stringify(oldquestions),
-                {
-                    ex: 60 * 60 * 24
-                }
-            );
+        // Redis mein quiz save 
+       
+else {
+    const quizToSave = {
+       id: crypto.randomUUID(),
+        ...quiz,
+        answered: false,
+        selectedOption: null,
+        isCorrect: null
+    };
 
-            return quiz
+    oldquestions.push(quizToSave);
+
+    await redis.set(
+        `quiz:pdf:${sessionid}`,
+        JSON.stringify(oldquestions),
+        {
+            ex: 60 * 60 * 24
         }
+    );
+
+   return {
+    id: quizToSave.id,
+    question: quizToSave.question,
+    options: quizToSave.options,
+    topic: quizToSave.topic
+};
+}
+
 
 
     } catch (error) {
@@ -1146,7 +1304,13 @@ async function RandomAi(sessionid, documentId, quota, retrycount = 0) {
     console.log(retrycount);
 
 
-    const oldquestions = await redis.get(`quiz:random:${sessionid}`) || []
+   const storedData = await redis.get(`quiz:random:${sessionid}`);
+
+const oldquestions = !storedData
+  ? []
+  : typeof storedData === "string"
+    ? JSON.parse(storedData)
+    : storedData;
 
     const topics = [
         "Physics",
@@ -1266,15 +1430,32 @@ OUTPUT:
         if (duplicate) {
             return RandomAi(sessionid, documentId, quota, retrycount + 1)
         }
-        else {
-            oldquestions.push(quiz)
-            await redis.set(`quiz:random:${sessionid}`,
-                JSON.stringify(oldquestions),
-                {
-                    ex: 60 * 60 * 24
-                })
-            return quiz
-        }
+      else {
+  const quizToSave = {
+    id: crypto.randomUUID(),
+    ...quiz,
+    answered: false,
+    selectedOption: null,
+    isCorrect: null,
+  };
+
+  oldquestions.push(quizToSave);
+
+  await redis.set(
+    `quiz:random:${sessionid}`,
+    JSON.stringify(oldquestions),
+    {
+      ex: 60 * 60 * 24,
+    }
+  );
+
+  return {
+    id: quizToSave.id,
+    question: quizToSave.question,
+    options: quizToSave.options,
+    topic: quizToSave.topic,
+  };
+}
 
     } catch (error) {
         console.log("Quiz generation error:", error);
@@ -1530,7 +1711,7 @@ if (pdfSelected) {
         documentId
     );
 
-    console.log("🔎 PDF SEARCH RESULTS:", results);
+  
 
    const relevantResults = results.filter(
     result => result.score >= 0.55

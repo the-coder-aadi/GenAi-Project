@@ -151,6 +151,7 @@ const [toastMessage, setToastMessage] = useState("");
   const [messages, setmessages] = useState([]);
   const [input, setInput] = useState("");
   const [isTyping, setIsTyping] = useState(false);
+const [checkingQuestionId, setCheckingQuestionId] = useState(null);
 
   const [messagesLoading, setMessagesLoading] = useState(true);
   // =========================================================
@@ -175,6 +176,7 @@ const [toastMessage, setToastMessage] = useState("");
   const chatEndRef = useRef(null);
   const fileInputRef = useRef(null);
   const modeRef = useRef("chat");
+  const summaryRunRef = useRef(0);
 
   // =========================================================
   // SESSION ID
@@ -275,38 +277,40 @@ async function UsersInfo() {
             return;
           }
 
+          
           const history =
             await loadQuizHistory(savedQuizType);
 
-          if (history.length > 0) {
-            const historyMessages =
-              history.map((quiz, index) => ({
-                sender: "bot",
-                type: "quiz-question",
-                quiztype: savedQuizType,
-                question: quiz.question,
-                options: quiz.options,
-                topic: quiz.topic,
-                correctOption: quiz.correctOption,
+            const lastQuizId = history[history.length - 1]?.id;
 
-                answered: true,
-                selectedOption: null,
-                isCorrect: null,
+ const historyMessages = history.map((quiz) => ({
+  sender: "bot",
+  type: "quiz-question",
+  quiztype: savedQuizType,
 
-                showNextActions:
-                  index === history.length - 1,
+  id: quiz.id,
+  question: quiz.question,
+  options: quiz.options,
+  topic: quiz.topic,
 
-                time: "",
-              }));
+  answered: quiz.answered === true,
+  selectedOption: quiz.answered === true
+    ? quiz.selectedOption ?? null
+    : null,
+  isCorrect: quiz.answered === true
+    ? quiz.isCorrect ?? null
+    : null,
+  correctOption: quiz.answered === true
+    ? quiz.correctOption ?? null
+    : null,
 
-            setmessages(historyMessages);
-          } else {
-            setmessages([
-              getModeWelcomeMessage("quiz")
-            ]);
-          }
+  showNextActions:
+  quiz.id === lastQuizId && quiz.answered === true,
+  time: "",
+}));
 
-          return;
+setmessages(historyMessages);
+return;
         }
 
         // =========================
@@ -512,6 +516,7 @@ async function loadChatHistory() {
   // =========================================================
 
  async function handleModeChange(newMode) {
+    cancelSummarisation(); 
   modeRef.current = newMode;
 
   setIsModeLoading(true);
@@ -688,6 +693,7 @@ if (res.limitExceeded) {
   // =========================================================
 
 async function removeDocument(documentId) {
+    cancelSummarisation(); 
   try {
     const response = await fetch(
       `${import.meta.env.VITE_API_URL}/documents/${documentId}`,
@@ -788,6 +794,34 @@ async function loadDocuments() {
   useEffect(() => {
     loadDocuments();
   }, []);
+
+  async function checkresult(questionId, selectedOption, quiztype) {
+    try {
+      const api = await fetch(`${import.meta.env.VITE_API_URL}/checkresult`,
+        
+        {
+          method:"POST",
+        credentials:"include",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          questionId,
+          selectedOption,
+          quiztype
+        })
+      },
+    
+    )
+    const data = await api.json();
+  
+    return data
+    
+    } catch (err) {
+      console.log(err);
+      
+    }
+  }
   // =========================================================
   // START QUIZ
   // =========================================================
@@ -805,40 +839,34 @@ async function loadDocuments() {
     const history = await loadQuizHistory(type);
 
     console.log("Loaded quiz history:", history);
-
+const lastQuizId = history[history.length - 1]?.id;
     if (history.length > 0) {
       console.log("Quiz history mil gayi:", history);
 
-      const historyMessages = history.map((quiz, index) => ({
-        sender: "bot",
-        type: "quiz-question",
+    
+const historyMessages = history.map((quiz, index) => ({
+  sender: "bot",
+  type: "quiz-question",
+  quiztype: type,
 
-        quiztype: type,
+  id: quiz.id,
+  question: quiz.question,
+  options: quiz.options,
+  topic: quiz.topic,
 
-        question: quiz.question,
+  answered: quiz.answered ?? false,
+  selectedOption: quiz.selectedOption ?? null,
+  isCorrect: quiz.isCorrect ?? null,
 
-        options: quiz.options,
+showNextActions:
+  quiz.id === lastQuizId && quiz.answered === true,
+correctOption: quiz.correctOption ?? null,
+  time: "",
+}));
 
-        topic: quiz.topic,
+setmessages(historyMessages);
+return;
 
-        correctOption: quiz.correctOption,
-
-        // Purani questions already answered maanenge
-        answered: true,
-
-        selectedOption: null,
-
-        isCorrect: null,
-
-        // Sirf LAST question par buttons dikhenge
-        showNextActions: index === history.length - 1,
-
-        time: "",
-      }));
-
-      setmessages(historyMessages);
-
-      return;
     }
 
     // Remove quiz option card
@@ -869,7 +897,7 @@ async function loadDocuments() {
   // HANDLE QUIZ ANSWER
   // =========================================================
 
-  function handleQuizAnswer(
+  async function handleQuizAnswer(
     messageIndex,
     selectedOption
   ) {
@@ -887,34 +915,56 @@ async function loadDocuments() {
     if (targetMessage.answered) {
       return;
     }
+setCheckingQuestionId(targetMessage.id);
+try {
+const result = await checkresult(
+  targetMessage.id,
+  selectedOption,
+  targetMessage.quiztype
+);
 
-    const correctOption = targetMessage.correctOption;
+if (!result || !result.success) {
+  return;
+}
 
-    // Exact match
-    const isCorrect =
-      selectedOption === correctOption;
+const isCorrect = result.isCorrect;
+const correctOption = result.correctOption;
 
-    // Browser alert
-  setQuizCorrect(isCorrect);
-  setQuizResultOpen(true);
+// Same UI logic as before
+setQuizCorrect(isCorrect);
+setQuizResultOpen(true);
 
-    // Update this question permanently
-    setmessages((prev) =>
-      prev.map((message, index) => {
-        if (index !== messageIndex) {
-          return message;
-        }
+// Update this question
+setmessages((prev) => {
+  const lastQuizMessage = [...prev]
+    .reverse()
+    .find((msg) => msg.type === "quiz-question");
 
-        return {
-          ...message,
-          answered: true,
-          selectedOption: selectedOption,
-          isCorrect: isCorrect,
-          showNextActions: true,
-        };
-      })
-    );
+  return prev.map((message) => {
+    if (message.id !== targetMessage.id) {
+      return {
+        ...message,
+        showNextActions: false,
+      };
+    }
+
+    return {
+      ...message,
+      answered: true,
+      selectedOption: result.selectedOption,
+      isCorrect: result.isCorrect,
+      correctOption: result.correctOption,
+      showNextActions:
+        message.id === lastQuizMessage?.id,
+    };
+  });
+});
+
+} finally {
+ setCheckingQuestionId(null);
+}
   }
+  
   async function handleNextQuizQuestion() {
     setmessages((prev) =>
       prev.map((msg) => ({
@@ -974,12 +1024,26 @@ async function loadDocuments() {
     return `${minutes}m ${secs}s`;
   }
 
+  function cancelSummarisation() {
+  summaryRunRef.current += 1; // purana loop invalid ho gaya
+  setIsSummarising(false);
+  setIsTyping(false);
+  setSummaryWaitingForQuota(false);
+}
+
+useEffect(() => {
+  cancelSummarisation();
+}, [selectedDocIds]);
+
  async function startSummarisation() {
+  const runId = ++summaryRunRef.current;   // NEW
+  const docId = selectedDocIds[0];         
+
   setIsSummarising(true);
   setIsTyping(true);
 
   const summaryDocument = documents.find(
-    doc => doc.id === selectedDocIds[0]
+    doc => doc.id === docId
   );
 
   const summaryDocumentName =
@@ -999,16 +1063,20 @@ async function loadDocuments() {
           },
 credentials: "include",
         body: JSON.stringify({
-  documentId: selectedDocIds[0],
+  documentId: docId,
   offset
 })
         }
       );
 
       const res = await api.json();
-
+  if (summaryRunRef.current !== runId) return;
       console.log("Summary response:", res);
 
+      if (res.msg == "notext") {
+  alert(response.message);
+  return;
+}
       // =========================
       // QUOTA HIT
       // =========================
@@ -1054,7 +1122,7 @@ credentials: "include",
             (seconds + 1) * 1000
           )
         );
-
+if (summaryRunRef.current !== runId) return;
         // Quota ke baad same loop dobara chalega
         continue;
       }
@@ -1158,15 +1226,18 @@ credentials: "include",
       await new Promise(resolve =>
         setTimeout(resolve, 60 * 1000)
       );
+      if (summaryRunRef.current !== runId) return;
     }
 
   } catch (error) {
     console.log("Summary error:", error);
 
   } finally {
-    setIsSummarising(false);
-    setIsTyping(false);
-    setSummaryWaitingForQuota(false);
+    if (summaryRunRef.current === runId) {           // NEW
+      setIsSummarising(false);
+      setIsTyping(false);
+      setSummaryWaitingForQuota(false);
+    }                                                // NEW
   }
 }
 
@@ -1464,45 +1535,33 @@ try {
           const topic = quizData.topic
 
           // Validate backend data
-          if (
-            question &&
-            Array.isArray(options) &&
-            options.length > 0 &&
-            correctOption
-          ) {
-            setmessages((prev) => [
-              ...prev,
-              {
-                sender: "bot",
+        if (
+  quizData.id &&
+  question &&
+  Array.isArray(options) &&
+  options.length > 0
+) {
+  setmessages((prev) => [
+    ...prev,
+    {
+      sender: "bot",
+      type: "quiz-question",
+      quiztype: res.quiztype,
 
-                type: "quiz-question",
+      id: quizData.id,
+      question,
+      options,
+      topic: quizData.topic,
 
-                quiztype: res.quizType,
+      answered: false,
+      selectedOption: null,
+      isCorrect: null,
 
-                question: question,
-
-                options: options,
-
-                topic: topic,
-
-                correctOption:
-                  correctOption,
-
-                // Answer state
-                answered: false,
-
-                selectedOption: null,
-
-                isCorrect: null,
-
-                showNextActions: false,
-
-                time: formatTime(
-                  new Date()
-                ),
-              },
-            ]);
-          }
+      showNextActions: false,
+      time: formatTime(new Date()),
+    },
+  ]);
+}
         } else {
           console.error(
             "Invalid quiz response:",
@@ -2274,7 +2333,7 @@ async function clearSummary(documentId) {
                     </div>
 
                     <div className="flex flex-col items-start w-full">
-                      <div className="bg-white border border-gray-100 rounded-2xl rounded-bl-sm p-4 sm:p-5 shadow-sm w-full">
+                      <div className="relative bg-white border border-gray-100 rounded-2xl rounded-bl-sm p-4 sm:p-5 shadow-sm w-full">
                         {/* QUESTION HEADER */}
 
                         <div className="flex items-start gap-3 mb-5">
@@ -2469,7 +2528,17 @@ async function clearSummary(documentId) {
                         </div>
 
 
+{checkingQuestionId === message.id && (
+  <div className="absolute inset-0 z-20 flex items-center justify-center rounded-2xl bg-white/60 backdrop-blur-sm">
+    <div className="flex flex-col items-center gap-3 rounded-xl bg-white/90 px-6 py-5 shadow-md">
+      <div className="h-10 w-10 animate-spin rounded-full border-4 border-indigo-100 border-t-indigo-600" />
 
+      <p className="text-sm font-semibold text-gray-700">
+        Checking result...
+      </p>
+    </div>
+  </div>
+)}
                         {/* RESULT MESSAGE */}
 
                         {/* {message.answered && (

@@ -98,3 +98,11 @@ Find relevant document content
 Send relevant content to AI
     ↓
 Generate response
+
+## Known Limitations
+
+- Traditional user login is not implemented; sessions are cookie-based.
+- Razorpay is currently configured for test mode.
+- Automated tests are not yet implemented.
+- Usage quotas are managed using Redis counters.
+- RAG response quality has not yet been formally evaluated.
