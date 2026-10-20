@@ -9,7 +9,7 @@ import multer from "multer"
 import fs from "fs/promises"
 import { isDuplicate } from "./Rag.js"
 import crypto from "crypto"
-import connectdb from "./db.js"
+// import connectdb from "./db.js"
 import { tavily } from "@tavily/core"
 import { getquizs } from "./Rag.js"
 import cloudinary from "./config/cloudinary.js"
@@ -50,7 +50,7 @@ const PLAN_LIMITS = {
     premium: PREMIUMLIMITS
 };
 
-connectdb()
+// connectdb()
 const groq = new Groq({
     apiKey: process.env.GROQ_API
 })
@@ -1397,9 +1397,27 @@ OUTPUT:
             model: "openai/gpt-oss-20b",
             messages: message,
             temperature: 0.7,
-            response_format: {
-                type: "json_object"
-            }
+           response_format: {
+  type: "json_schema",
+  json_schema: {
+    name: "random_quiz",
+    strict: true,
+    schema: {
+      type: "object",
+      properties: {
+        question: { type: "string" },
+        options: {
+          type: "array",
+          items: { type: "string" }
+        },
+        correctOption: { type: "string" },
+        topic: { type: "string" }
+      },
+      required: ["question", "options", "correctOption", "topic"],
+      additionalProperties: false
+    }
+  }
+}
 
         })
 
@@ -1459,6 +1477,10 @@ OUTPUT:
 
     } catch (error) {
         console.log("Quiz generation error:", error);
+
+          if (error?.status === 400 && retrycount < 2) {
+    return RandomAi(sessionid, documentId, quota, retrycount + 1);
+  }
 
         return {
             error: "Quiz generate nahi ho paya."

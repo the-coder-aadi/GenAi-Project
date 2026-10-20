@@ -177,6 +177,7 @@ const [checkingQuestionId, setCheckingQuestionId] = useState(null);
   const fileInputRef = useRef(null);
   const modeRef = useRef("chat");
   const summaryRunRef = useRef(0);
+  const modeSwitchRef = useRef(0);
 
   // =========================================================
   // SESSION ID
@@ -518,6 +519,7 @@ async function loadChatHistory() {
  async function handleModeChange(newMode) {
     cancelSummarisation(); 
   modeRef.current = newMode;
+  modeSwitchRef.current += 1;
 
   setIsModeLoading(true);
   setMode(newMode);
@@ -1338,6 +1340,8 @@ if (summaryRunRef.current !== runId) return;
   }
 
     const userMessage = input;
+    const requestMode = mode;
+    const switchCountAtStart = modeSwitchRef.current; 
 
     // -------------------------------------------------------
     // NORMAL CHAT MESSAGE
@@ -1433,19 +1437,28 @@ try {
       // CHAT RESPONSE
       // =====================================================
 
-      if (
-        res.success &&
-        res.mode === "chat"
-      ) {
-        setmessages((prev) => [
-          ...prev,
-          {
-            sender: "bot",
-            text: res.aimsg,
-            time: formatTime(new Date()),
-          },
-        ]);
-      }
+if (
+  res.success &&
+  res.mode === "chat"
+) {
+  // user ab chat mode mein nahi hai to kuch mat dikhao
+  if (modeRef.current !== "chat") return;
+
+  // 👇 NEW: beech mein mode badla tha, to DB se poori history lao
+  if (modeSwitchRef.current !== switchCountAtStart) {
+    await loadChatHistory();
+    return;
+  }
+
+  setmessages((prev) => [
+    ...prev,
+    {
+      sender: "bot",
+      text: res.aimsg,
+      time: formatTime(new Date()),
+    },
+  ]);
+}
 
       // =====================================================
       // SUMMARY RESPONSE

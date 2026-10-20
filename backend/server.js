@@ -5,7 +5,7 @@ import Razorpay from "razorpay"
 import crypto from "crypto"
 import User from "./models/User.js"
 import cookieParser from "cookie-parser";
-
+import connectdb from "./db.js"
 
 
 const App = express()
@@ -180,8 +180,8 @@ async function activatePayment(user, purchasedPlan) {
 App.use(express.json())
 App.use(
   cors({
-    origin: "https://genai-project-1-k67z.onrender.com",
-// origin:"http://localhost:5173",
+    // origin: "https://genai-project-1-k67z.onrender.com",
+origin:"http://localhost:5173",
 credentials: true,
   })
 )
@@ -430,8 +430,18 @@ App.get("/user/planinfo", async (req, res) => {
 
 const PORT = process.env.PORT || 3000;
 
-App.listen(PORT, "0.0.0.0", () => {
-  console.log(`server running on ${PORT}`);
-});
+async function startServer() {
+  try {
+    await connectdb();
 
+    App.listen(PORT, "0.0.0.0", () => {
+      console.log(`server running on ${PORT}`);
+    });
+  } catch (error) {
+    console.error("Server startup failed:", error);
+    process.exit(1);
+  }
+}
+
+startServer();
 
