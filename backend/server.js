@@ -10,6 +10,9 @@ import connectdb from "./db.js"
 
 const App = express()
 
+App.get("/health", (req, res) => {
+  res.status(200).send("ok");
+});
 
 App.post(
   "/api/payment/webhook",
